@@ -1,0 +1,588 @@
+{
+  "format": 1,
+  "name": "Demo",
+  "output": {
+    "width": 1920,
+    "height": 1080,
+    "screen": "HDMI-1"
+  },
+  "surfaces": [
+    {
+      "id": "refphoto",
+      "name": "Ref: room.png",
+      "kind": "reference",
+      "corners": [
+        [
+          0,
+          0
+        ],
+        [
+          1920,
+          0
+        ],
+        [
+          1920,
+          1080
+        ],
+        [
+          0,
+          1080
+        ]
+      ],
+      "media": "media/room.png",
+      "opacity": 0.35,
+      "visible": true,
+      "loop": true,
+      "speed": 1.0,
+      "flip_h": false,
+      "flip_v": false,
+      "item_type": "",
+      "notes": "stand-in for a photo taken from the projector position",
+      "locked": true,
+      "video_audio": false,
+      "react": null,
+      "tint": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "key_black": false,
+      "key_threshold": 0.12,
+      "mesh": null
+    },
+    {
+      "id": "pumpkin1",
+      "name": "Pumpkin",
+      "kind": "media",
+      "corners": [
+        [
+          479.5294117647059,
+          394.8235294117647
+        ],
+        [
+          714.1176470588232,
+          408.70588235294116
+        ],
+        [
+          751.0588235294113,
+          569.1764705882351
+        ],
+        [
+          535.7647058823527,
+          600.4705882352939
+        ]
+      ],
+      "media": "media/pulse.gif",
+      "opacity": 1.0,
+      "visible": true,
+      "loop": true,
+      "speed": 1.0,
+      "flip_h": false,
+      "flip_v": false,
+      "item_type": "decoration",
+      "notes": "",
+      "locked": false,
+      "video_audio": false,
+      "react": {
+        "param": "scale",
+        "band": "bass",
+        "amount": 0.6
+      },
+      "tint": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "key_black": true,
+      "key_threshold": 0.12,
+      "mesh": null
+    },
+    {
+      "id": "wall0001",
+      "name": "Wall",
+      "kind": "media",
+      "corners": [
+        [
+          583.7647058823529,
+          -5.294117647058812
+        ],
+        [
+          1916.5882352941176,
+          72.11764705882351
+        ],
+        [
+          1914.5882352941176,
+          484.94117647058823
+        ],
+        [
+          1000.8235294117648,
+          516.8235294117646
+        ]
+      ],
+      "media": "media/bars.mp4",
+      "opacity": 1.0,
+      "visible": true,
+      "loop": true,
+      "speed": 1.0,
+      "flip_h": true,
+      "flip_v": true,
+      "item_type": "wall",
+      "notes": "",
+      "locked": false,
+      "video_audio": false,
+      "react": null,
+      "tint": [
+        0.5686274766921997,
+        0.2549019753932953,
+        0.6745098233222961
+      ],
+      "key_black": true,
+      "key_threshold": 0.12,
+      "mesh": null
+    },
+    {
+      "id": "ghost001",
+      "name": "Ghost",
+      "kind": "media",
+      "corners": [
+        [
+          681.1764705882351,
+          784.7058823529411
+        ],
+        [
+          859.7647058823524,
+          756.470588235294
+        ],
+        [
+          862.588235294117,
+          973.7647058823554
+        ],
+        [
+          661.4117647058822,
+          1004.8235294117671
+        ]
+      ],
+      "media": "media/ghost.png",
+      "opacity": 0.9,
+      "visible": true,
+      "loop": true,
+      "speed": 1.0,
+      "flip_h": false,
+      "flip_v": false,
+      "item_type": "decoration",
+      "notes": "",
+      "locked": false,
+      "video_audio": false,
+      "react": {
+        "param": "gain",
+        "band": "bass",
+        "amount": 0.8
+      },
+      "tint": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "key_black": false,
+      "key_threshold": 0.12,
+      "mesh": null
+    },
+    {
+      "id": "crate1",
+      "name": "Crate",
+      "kind": "media",
+      "corners": [
+        [
+          100,
+          100
+        ],
+        [
+          500,
+          100
+        ],
+        [
+          500,
+          400
+        ],
+        [
+          100,
+          400
+        ]
+      ],
+      "media": "media/flames.mp4",
+      "opacity": 1.0,
+      "visible": true,
+      "loop": true,
+      "speed": 1.0,
+      "flip_h": false,
+      "flip_v": false,
+      "item_type": "flat object",
+      "notes": "a box made of triangles: drag any vertex, A on an edge grows another",
+      "locked": false,
+      "video_audio": false,
+      "react": null,
+      "tint": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "key_black": true,
+      "key_threshold": 0.12,
+      "mesh": {
+        "verts": [
+          [
+            1400.470588235294,
+            507.2941176470588,
+            0.0,
+            0.0
+          ],
+          [
+            1717.8823529411768,
+            600.4705882352941,
+            0.5,
+            0.0
+          ],
+          [
+            1848.9411764705885,
+            665.4117647058824,
+            1.0,
+            0.0
+          ],
+          [
+            1386.3529411764705,
+            596.0000000000001,
+            0.0,
+            0.5
+          ],
+          [
+            1788.4705882352944,
+            793.6470588235294,
+            0.5,
+            0.5
+          ],
+          [
+            2021.1764705882356,
+            711.7647058823529,
+            1.0,
+            0.5
+          ],
+          [
+            1434.3529411764705,
+            969.8823529411762,
+            0.0,
+            1.0
+          ],
+          [
+            1788.4705882352944,
+            998.1176470588233,
+            0.5,
+            1.0
+          ],
+          [
+            1894.1176470588239,
+            1009.4117647058821,
+            1.0,
+            1.0
+          ]
+        ],
+        "tris": [
+          [
+            0,
+            1,
+            4
+          ],
+          [
+            0,
+            4,
+            3
+          ],
+          [
+            1,
+            2,
+            5
+          ],
+          [
+            1,
+            5,
+            4
+          ],
+          [
+            3,
+            4,
+            7
+          ],
+          [
+            3,
+            7,
+            6
+          ],
+          [
+            4,
+            5,
+            8
+          ],
+          [
+            4,
+            8,
+            7
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bush1",
+      "name": "Bush",
+      "kind": "media",
+      "corners": [
+        [
+          100,
+          100
+        ],
+        [
+          500,
+          100
+        ],
+        [
+          500,
+          400
+        ],
+        [
+          100,
+          400
+        ]
+      ],
+      "media": "media/eyes.gif",
+      "opacity": 1.0,
+      "visible": true,
+      "loop": true,
+      "speed": 1.0,
+      "flip_h": false,
+      "flip_v": false,
+      "item_type": "curved object",
+      "notes": "six triangles sharing a centre vertex (one group, one media)",
+      "locked": false,
+      "video_audio": false,
+      "react": null,
+      "tint": [
+        0.6,
+        1.0,
+        0.6
+      ],
+      "key_black": false,
+      "key_threshold": 0.12,
+      "mesh": {
+        "verts": [
+          [
+            176.1176470588235,
+            381.5294117647059,
+            0.5,
+            0.5
+          ],
+          [
+            176.1176470588235,
+            211.5294117647059,
+            0.5,
+            0.0
+          ],
+          [
+            323.34196570217796,
+            296.5294117647059,
+            0.9330127018922193,
+            0.25
+          ],
+          [
+            323.34196570217796,
+            466.5294117647056,
+            0.9330127018922194,
+            0.7499999999999999
+          ],
+          [
+            176.1176470588235,
+            551.5294117647068,
+            0.5,
+            1.0
+          ],
+          [
+            28.89332841546897,
+            466.5294117647056,
+            0.06698729810778076,
+            0.7500000000000002
+          ],
+          [
+            28.89332841546897,
+            296.5294117647059,
+            0.0669872981077807,
+            0.24999999999999994
+          ]
+        ],
+        "tris": [
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            2,
+            3
+          ],
+          [
+            0,
+            3,
+            4
+          ],
+          [
+            0,
+            4,
+            5
+          ],
+          [
+            0,
+            5,
+            6
+          ],
+          [
+            0,
+            6,
+            1
+          ]
+        ]
+      }
+    }
+  ],
+  "cues": [
+    {
+      "id": "c1",
+      "name": "Dark",
+      "media": {
+        "pumpkin1": null,
+        "wall0001": null,
+        "ghost001": null,
+        "crate1": null,
+        "bush1": null
+      },
+      "fade": 0.0,
+      "hold": null,
+      "audio": null,
+      "audio_gain": 0.7,
+      "audio_loop": true,
+      "audio_fade": null
+    },
+    {
+      "id": "c2",
+      "name": "Pumpkin wakes",
+      "media": {
+        "pumpkin1": "media/pulse.gif",
+        "wall0001": null,
+        "ghost001": null,
+        "crate1": "media/flames.mp4",
+        "bush1": "media/eyes.gif"
+      },
+      "fade": 2.0,
+      "hold": 4.0,
+      "audio": "media/drone.wav",
+      "audio_gain": 0.7,
+      "audio_loop": true,
+      "audio_fade": null
+    },
+    {
+      "id": "c3",
+      "name": "Everything",
+      "media": {
+        "pumpkin1": "media/pulse.gif",
+        "wall0001": "media/bars.mp4",
+        "ghost001": "media/ghost.png",
+        "crate1": "media/flames.mp4",
+        "bush1": "media/eyes.gif"
+      },
+      "fade": 1.5,
+      "hold": null,
+      "audio": "media/drone.wav",
+      "audio_gain": 0.7,
+      "audio_loop": true,
+      "audio_fade": null
+    },
+    {
+      "id": "c4",
+      "name": "Ghost only",
+      "media": {
+        "pumpkin1": null,
+        "wall0001": null,
+        "ghost001": "media/ghost.png",
+        "crate1": null,
+        "bush1": null
+      },
+      "fade": 3.0,
+      "hold": null,
+      "audio": null,
+      "audio_gain": 0.7,
+      "audio_loop": true,
+      "audio_fade": null
+    },
+    {
+      "id": "4d440475",
+      "name": "Storm",
+      "media": {
+        "pumpkin1": "media/lightning.mp4",
+        "wall0001": "media/rain.mp4",
+        "ghost001": "media/ghost.png",
+        "crate1": "media/drips.mp4",
+        "bush1": "media/fog.mp4"
+      },
+      "fade": 2.0,
+      "hold": null,
+      "audio": "media/drone.wav",
+      "audio_gain": 0.5,
+      "audio_loop": true,
+      "audio_fade": null
+    }
+  ],
+  "scene": {
+    "projector": {
+      "pos": [
+        0.0,
+        -3.0,
+        1.2
+      ],
+      "hpr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "fov_h": 40.0,
+      "device_id": "genericpj"
+    },
+    "nodes": [
+      {
+        "id": "kinect001",
+        "name": "Kinect",
+        "kind": "camera",
+        "model": "box",
+        "pos": [
+          1.2,
+          -2.2,
+          0.9
+        ],
+        "hpr": [
+          25,
+          -5,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "fov_h": 58.0,
+        "color": [
+          0.75,
+          0.75,
+          0.75
+        ],
+        "device_id": "kinectv2",
+        "item_type": "",
+        "notes": ""
+      }
+    ]
+  }
+}

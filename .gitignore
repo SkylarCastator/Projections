@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+*.egg-info/
+
+# generated demo media (examples/make_demo_media.py) and anything captured from a camera
+examples/media/
+*.calib.npz
+*.scan.npz
+*.promap.autosave
+camera_ref_*.png
+
+# local tooling
+.claude/
