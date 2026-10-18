@@ -361,3 +361,7 @@ work in Python.
   the projector, and depth-reactive animations.
 - Known artefact: Panda's projective texturing also paints props *behind* the projector
   (mirrored), as fixed-function projection has no front/back test.
+
+## License
+
+MIT. See `LICENSE`.
