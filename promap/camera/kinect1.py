@@ -164,7 +164,7 @@ class KinectV1:
 
 
 class KinectV1CameraAdapter:
-    """Looks like capture.Camera to the Camera dock, plus `latest_depth()` (mm, same pixels as the RGB)."""
+    """Looks like capture.Camera to the Camera window, plus `latest_depth()` (mm, same pixels as the RGB)."""
 
     def __init__(self, kinect: KinectV1 | None = None):
         self.kinect = kinect or KinectV1()

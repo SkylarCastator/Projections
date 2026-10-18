@@ -25,24 +25,32 @@ uv pip install -e ".[dev]"
    then **Output → Open on screen → <projector>**. Esc in that window closes it.
 2. **Output → Test pattern (T)** projects a labelled grid with every surface outlined,
    for focusing the lens and seeing where quads land on the props.
-3. **+ Media** adds a surface (a quad). Drag its corners in the canvas until the
+3. The tool palette down the left of the canvas adds things to the scene: **▢ Media**
+   adds a surface (a quad), **△** a triangle, **▣** a mask, **▦** a reference photo,
+   **⌇** the lasso. Drag a quad's corners in the canvas until the
    media hugs the object. Drag inside to move the whole quad. Arrow keys nudge the
    active corner (Tab cycles corners, Shift = 10 px steps, Shift-drag snaps to 10 px).
-   **+ Mask** adds a black quad to blank out spill (a window, a doorway).
-4. Pick the surface's media with `…`. Surfaces are drawn in list order; ▲/▼ reorders.
+   **▣ Mask** adds a black quad to blank out spill (a window, a doorway).
+4. Pick the surface's **Type**: image, video, animated image (GIF / WebP) or a built-in
+   animation. The picker and the options below follow the type: Loop and Speed only for
+   things that move, Video audio only for video, and for an animation a drop-down of
+   effects plus **Parameters…**, which opens the Animations window on it with live edits.
+   Surfaces are drawn in list order. Right-click a
+   surface, in the list or in the canvas, for Duplicate, Delete, Bring to front / Move
+   up / Move down / Send to back, and Lock. Delete in the list removes the selected one.
 5. **Cues**: set each surface's media the way a moment of the show should look, then
    **Add from editor**. Each cue stores one media path (or none = dark) per surface,
    a crossfade length and an optional hold time for auto-advance.
 6. **GO (Space)** / **Back (Backspace)** step through cues. **Preview mode** drops
    back to the editor's own assignments. **B** blackout. **Esc** in the canvas clears
    anything that hides the surfaces: a blackout, a calibration or scan in progress, the
-   Camera dock's white wash. A red banner at the top of the canvas names whichever of
+   Camera window's white wash. A red banner at the top of the canvas names whichever of
    those is active, and a cue that assigns no media.
 
 Project files are JSON (`.promap`); media paths are stored relative to the project
 file so a show folder can be copied whole.
 
-**Reference photos.** `+ Ref image` loads a photo of the space (ideally shot from the
+**Reference photos.** **▦** in the tool palette loads a photo of the space (ideally shot from the
 projector's lens position) as a half-transparent layer under everything in the editor
 only; it never reaches the projector. Drag its corners to line it up with the projected
 test pattern, then tick **Lock** so it stops catching the mouse.
@@ -63,16 +71,27 @@ drag is one step however long it lasts; slider-style edits that land within 0.4 
 other merge into one step; the live People surface and other camera-driven updates never
 enter the history. Up to 200 steps are kept; loading a project clears them.
 
-**Lasso tool (L).** Edit → Lasso, or press **L** in the canvas. Drag freehand round an
+**Lasso tool (L).** **⌇** in the tool palette, Edit → Lasso, or press **L** in the canvas. Drag freehand round an
 object, or click out the corners one by one, then double-click or press Enter to close
 the loop (Esc cancels). The outline is simplified and triangulated into a new mesh
 surface named `Lasso n`, ready for media like any other mesh. It is the quick way to
 trace a prop by eye off a reference photo or the projected test pattern when the camera
 isn't set up.
 
+**Viewer tabs.** Above the viewer: one tab per output screen, **All** (every output in
+one view) and **3D**. The 3D tab shows the Panda3D scene in place of the canvas and brings
+the **3D scene** dock forward; a screen tab brings **Surfaces** back.
+
+**Panels and windows.** Surfaces, 3D scene, Cues and Timeline are dock panels. Drag one
+out by its title bar, or double-click the title, and it becomes its own window; close any
+of them and bring it back from **View → Panels**; **Reset panel layout** puts everything
+back. Camera and Animations are separate windows from the start: **View → Camera window**
+(Ctrl+Shift+C) and **View → Animations window** (Ctrl+Shift+A) open them beside the
+editor, and they can sit on a second screen. Window positions are remembered between runs.
+
 ## Triangle meshes
 
-A quad (`+ Media`) is the right primitive for a flat rectangular face: four handles and a
+A quad (**▢**) is the right primitive for a flat rectangular face: four handles and a
 perspective-correct warp. Everything else is a **mesh**: triangles sharing vertices, built
 like game geometry, all showing one piece of media (the mesh *is* the group).
 
@@ -98,7 +117,7 @@ subdivided. The quad path stays projective, so convert only when you need the cu
 
 ## Camera (webcam on the projector)
 
-The **Camera** dock (tabbed behind Surfaces) lists the USB cameras that deliver frames,
+The **Camera** window (View → Camera window, Ctrl+Shift+C) lists the USB cameras that deliver frames,
 shows a live preview and does three jobs:
 
 1. **Calibrate.** With the output window open on the projector and the room dimmed, it
@@ -155,7 +174,7 @@ libglfw3-dev`) and the udev rule that lets a user open the device.
 fails with `LIBUSB_ERROR_BUSY` on interface 1. The check script prints the link speed; it
 has to read 5000 or more.
 
-In the Camera dock the Kinect appears as a device, "Kinect v2 (colour on depth pixels)".
+In the Camera window the Kinect appears as a device, "Kinect v2 (colour on depth pixels)".
 It delivers the colour image registered onto the depth pixels, so calibrating through it
 maps depth pixels straight to projector pixels and everything else in the dock (scan,
 detection, create surfaces) works unchanged. Extras with a Kinect: the *live depth* view,
@@ -167,7 +186,7 @@ nearer than 4.5 m without one), which does not care about colour or lighting at 
 the easy one: `sudo apt install freenect libfreenect0.5t64 libfreenect-bin` installs the
 driver and its udev rule, it works over USB 2, and promap talks to it through libfreenect's
 synchronous C API with ctypes (`promap/camera/kinect1.py`), nothing to compile. It shows up
-in the Camera dock as "Kinect v1 (depth on colour pixels)": depth comes registered onto the
+in the Camera window as "Kinect v1 (depth on colour pixels)": depth comes registered onto the
 RGB image, so the same calibrate / scan / detect flow applies, with *live depth* and the
 *depth* detection mode (its *nearer by* / *max range* controls appear when the mode is
 selected, and the cut-out is shaded on the preview). Depth mode cuts out what stands at
@@ -189,7 +208,7 @@ and under 0.8 m.
 
 ### Planes, people and skeletons (depth camera)
 
-The last group in the Camera dock needs a running Kinect:
+The last group in the Camera window needs a running Kinect:
 
 - **Find planes** fits the flat surfaces in the depth image (walls, floor, slopes, table
   tops, box faces): per-pixel normals, a vote over normal direction and offset, least-squares
@@ -212,8 +231,7 @@ The last group in the Camera dock needs a running Kinect:
 ## Scripted animations
 
 Twenty animations are code, not files: GLSL fragment shaders drawn on the GPU every frame
-with parameters you can change while they run. The **Animations** dock (tab beside
-Surfaces) lists them with a live preview and a parameter editor generated from each one's
+with parameters you can change while they run. The **Animations** window (View → Animations window, Ctrl+Shift+A) lists them with a live preview and a parameter editor generated from each one's
 spec: speed, scale, three colours, a seed, and one or two effect-specific knobs (glow width,
 pixel size, text, ...). *Assign to surface* puts the animation on the selected surface, in
 the editor or in the running cue; *+ Surface* adds a new quad with it; *+ Cue* snapshots the
@@ -318,16 +336,18 @@ selected 3D camera* does the same for a camera node.
 
 ## 3D scene view (Panda3D)
 
-**3D → Open 3D view (F3)** opens a Panda3D window beside the editor. The **3D scene** dock
-(tabbed behind Surfaces) edits the projector's pose and horizontal field of view (the
+The **3D** tab above the viewer (or **View → 3D scene tab**, F3) shows the Panda3D scene
+in place of the 2D canvas; F3 again closes it. **View → 3D scene in its own window** gives
+a separate window instead (for a second screen). The
+**3D scene** dock (tabbed behind Surfaces) edits the projector's pose and horizontal field of view (the
 throw ratio is shown next to it), extra cameras such as a Kinect, and props: box, plane,
 or any model file (obj / gltf / stl / egg via Assimp). Units are metres, Z up, +Y forward.
 
 The live 2D output is projected from the projector's frustum onto the props, so you can
 orbit the scene, look **through the projector** (what the lens sees) or **through a
-camera** offset from it (what the Kinect would see). Keys in the 3D window: `1` orbit,
-`2` projector, `3`..`9` cameras, `f` reset, `g` grid; drag to rotate, right-drag to pan,
-wheel to zoom.
+camera** offset from it (what the Kinect would see). Keys in the 3D tab (click it first):
+`1` orbit, `2` projector, `3`..`9` cameras, `f` reset, `g` grid; drag to rotate, right-drag
+to pan, wheel to zoom. Orbit and projector views are also under **View**.
 
 ## Architecture
 

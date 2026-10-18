@@ -1,4 +1,4 @@
-"""Camera dock: live webcam preview, projector<->camera calibration, object detection.
+"""Camera window: live webcam preview, projector<->camera calibration, object detection.
 
 Calibration projects a Gray-code sequence through the open output window while the
 camera watches (see promap.camera.graycode). The result is stored in the project

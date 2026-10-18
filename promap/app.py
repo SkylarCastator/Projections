@@ -36,6 +36,7 @@ def main(argv: list[str] | None = None) -> int:
 
     state = AppState()
     win = MainWindow(state)
+    win.restore_layout()
     if args.project:
         win.load_project(args.project)
     win.show()

@@ -138,6 +138,11 @@ class AnimationPanel(QWidget):
                 self.list.setCurrentRow(i)
         self._loading = False
 
+    def show_selected(self):
+        """Load the selected surface's animation for live editing (the Surfaces panel's Parameters… button)."""
+        self.follow.setChecked(True)
+        self._follow_selection(self.state.selected)
+
     def _target_media(self) -> str | None:
         """The selected surface's media as it is right now (editor or running cue)."""
         s = self.state.selected_surface

@@ -1,19 +1,53 @@
 """Surface list + property editor."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QColor
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton, QFormLayout,
     QLineEdit, QSlider, QCheckBox, QDoubleSpinBox, QGroupBox, QFileDialog, QLabel, QGridLayout, QComboBox,
-    QStackedWidget, QSpinBox, QColorDialog,
+    QStackedWidget, QSpinBox, QColorDialog, QSizePolicy,
 )
+
+from promap.media.generative import EFFECTS, is_generative, parse_media, make_media
+from promap.media.sources import IMAGE_EXTS, ANIM_EXTS, VIDEO_EXTS
 
 from promap.model.geometry import rect_corners, centroid
 from promap.model.project import ITEM_TYPES
 from promap.ui.state import AppState
+from promap.ui.surface_menu import surface_menu
 
 MEDIA_FILTER = "Media (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.mp4 *.mov *.avi *.mkv *.webm *.m4v);;All files (*)"
+
+# What a surface can show. The picker row and the options below it follow the chosen type.
+MEDIA_TYPES = [
+    ("None", "none"),
+    ("Image", "image"),
+    ("Video", "video"),
+    ("Animated image (GIF / WebP)", "anim"),
+    ("Animation (built-in)", "gen"),
+]
+MEDIA_FILTERS = {
+    "image": "Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff);;All files (*)",
+    "video": "Video (*.mp4 *.mov *.avi *.mkv *.webm *.m4v *.mpg *.mpeg);;All files (*)",
+    "anim": "Animated images (*.gif *.webp *.apng);;All files (*)",
+}
+
+
+def media_kind(media) -> str:
+    """Which MEDIA_TYPES key a media string is."""
+    if not media:
+        return "none"
+    if is_generative(media):
+        return "gen"
+    ext = Path(media).suffix.lower()
+    if ext in VIDEO_EXTS:
+        return "video"
+    if ext in ANIM_EXTS:
+        return "anim"
+    return "image"
 
 
 class SurfacePanel(QWidget):
@@ -28,20 +62,9 @@ class SurfacePanel(QWidget):
         self.list.currentRowChanged.connect(self._on_row)
         lay.addWidget(self.list, 1)
 
-        row = QHBoxLayout()
-        for text, fn, tip in [
-            ("+ Media", lambda: state.add_surface("media"), "A four-corner quad with a perspective warp (flat rectangular faces)"),
-            ("+ Tri", lambda: state.add_surface("media", mesh="triangle"), "One triangle; A / double-click an edge grows more, drag vertices together to join them"),
-            ("+ Mask", lambda: state.add_surface("mask"), "A black quad to blank spill"),
-            ("+ Ref image", self._add_reference, "A photo of the space, editor-only"),
-            ("Dup", self._dup, ""), ("Del", self._del, ""), ("▲", lambda: self._move(-1), ""), ("▼", lambda: self._move(1), ""),
-        ]:
-            b = QPushButton(text)
-            b.clicked.connect(fn)
-            if tip:
-                b.setToolTip(tip)
-            row.addWidget(b)
-        lay.addLayout(row)
+        self.list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self._list_menu)
+        self.list.installEventFilter(self)
 
         self.props = QGroupBox("Properties")
         form = QFormLayout(self.props)
@@ -61,21 +84,48 @@ class SurfacePanel(QWidget):
         self.notes.editingFinished.connect(self._apply)
         form.addRow("Notes", self.notes)
 
-        mrow = QHBoxLayout()
+        # -- media: a type, then a picker that fits the type ------------------------------
+        self.form = form
+        self.media_type = QComboBox()
+        for label, key in MEDIA_TYPES:
+            self.media_type.addItem(label, key)
+        self.media_type.setToolTip("What this surface shows. The picker and the options below follow the type.")
+        self.media_type.currentIndexChanged.connect(self._type_chosen)
+        form.addRow("Type", self.media_type)
+
         self.media = QLineEdit()
         self.media.setReadOnly(True)
         browse = QPushButton("…")
         browse.setFixedWidth(28)
+        browse.setToolTip("Choose a file")
         browse.clicked.connect(self._browse)
-        clear = QPushButton("×")
-        clear.setFixedWidth(28)
-        clear.clicked.connect(self._clear_media)
-        mrow.addWidget(self.media, 1)
-        mrow.addWidget(browse)
-        mrow.addWidget(clear)
-        self.media_row = QWidget()
-        self.media_row.setLayout(mrow)
-        form.addRow("Media", self.media_row)
+        frow = QHBoxLayout()
+        frow.setContentsMargins(0, 0, 0, 0)
+        frow.addWidget(self.media, 1)
+        frow.addWidget(browse)
+        file_page = QWidget()
+        file_page.setLayout(frow)
+
+        self.anim_combo = QComboBox()
+        for name, eff in EFFECTS.items():
+            self.anim_combo.addItem(f"{eff.title}   ·  {eff.group}", name)
+            self.anim_combo.setItemData(self.anim_combo.count() - 1, eff.blurb, Qt.ToolTipRole)
+        self.anim_combo.currentIndexChanged.connect(self._anim_chosen)
+        anim_edit = QPushButton("Parameters…")
+        anim_edit.setToolTip("Open the Animations window on this animation; edits apply live")
+        anim_edit.clicked.connect(lambda: self.state.windowRequested.emit("animations"))
+        arow = QHBoxLayout()
+        arow.setContentsMargins(0, 0, 0, 0)
+        arow.addWidget(self.anim_combo, 1)
+        arow.addWidget(anim_edit)
+        anim_page = QWidget()
+        anim_page.setLayout(arow)
+
+        self.media_pick = QStackedWidget()
+        self.media_pick.addWidget(file_page)  # 0: image / video / animated image
+        self.media_pick.addWidget(anim_page)  # 1: built-in animation
+        self.media_pick.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        form.addRow("Media", self.media_pick)
 
         self.opacity = QSlider(Qt.Horizontal)
         self.opacity.setRange(0, 100)
@@ -145,6 +195,7 @@ class SurfacePanel(QWidget):
         rrow.addWidget(self.react_amount, 1)
         rw = QWidget()
         rw.setLayout(rrow)
+        self.react_row = rw
         form.addRow("React", rw)
 
         # -- geometry: one page for quads, one for meshes ---------------------
@@ -267,23 +318,28 @@ class SurfacePanel(QWidget):
         it = self.list.item(row)
         self.state.select(it.data(Qt.UserRole) if it else None)
 
-    def _add_reference(self):
+    def add_reference(self):
+        """Pick a photo of the space and add it as an editor-only reference layer."""
         path, _ = QFileDialog.getOpenFileName(self, "Choose a photo of the space", str(self.state.project.base_dir),
                                               "Images (*.png *.jpg *.jpeg *.bmp *.webp);;All files (*)")
         if path:
             self.state.add_reference_image(path)
 
-    def _dup(self):
-        if self.state.selected:
-            self.state.duplicate_surface(self.state.selected)
+    def _list_menu(self, pos):
+        it = self.list.itemAt(pos)
+        if it is None:
+            return
+        self.list.setCurrentItem(it)  # right-click selects, like every other list
+        m = surface_menu(self.state, it.data(Qt.UserRole), self)
+        if m is not None:
+            m.exec(self.list.viewport().mapToGlobal(pos))
 
-    def _del(self):
-        if self.state.selected:
-            self.state.remove_surface(self.state.selected)
-
-    def _move(self, d: int):
-        if self.state.selected:
-            self.state.move_surface(self.state.selected, d)
+    def eventFilter(self, obj, ev):
+        if obj is self.list and ev.type() == QEvent.KeyPress and ev.key() in (Qt.Key_Delete, Qt.Key_Backspace):
+            if self.state.selected:
+                self.state.remove_surface(self.state.selected)
+            return True
+        return super().eventFilter(obj, ev)
 
     # -- properties --------------------------------------------------------------
     def _refresh_props(self, sid):
@@ -301,8 +357,7 @@ class SurfacePanel(QWidget):
         self.react_param.setCurrentText(r.get("param", "none") if r else "none")
         self.react_band.setCurrentText(r.get("band", "rms"))
         self.react_amount.setValue(int(round(float(r.get("amount", 0.5)) * 100)))
-        self.media.setText(self._media_text(s.media))
-        self.media_row.setEnabled(s.kind != "mask")
+        self._layout_media(s)
         self.opacity.setValue(int(round(s.opacity * 100)))
         self._show_tint(s.tint)
         self.key_black.setChecked(s.key_black)
@@ -335,13 +390,67 @@ class SurfacePanel(QWidget):
                 self.list.setCurrentItem(it)
         self._loading = False
 
-    @staticmethod
-    def _media_text(media) -> str:
-        if not media:
-            return ""
-        from promap.media.generative import is_generative, media_label
+    # -- media type ------------------------------------------------------------------
+    def _layout_media(self, s):
+        """Show the picker and the options that make sense for what the surface shows."""
+        kind = media_kind(s.media)
+        is_media = s.kind == "media"
+        self.media_type.setCurrentIndex(self.media_type.findData(kind))
+        self.form.setRowVisible(self.media_type, is_media)
+        self.form.setRowVisible(self.media_pick, s.kind != "mask" and kind != "none")
+        self.media_pick.setCurrentIndex(1 if kind == "gen" else 0)
+        if kind == "gen":
+            try:
+                self.anim_combo.setCurrentIndex(self.anim_combo.findData(parse_media(s.media)[0].name))
+            except ValueError:
+                pass
+        else:
+            self.media.setText(s.media or "")
+        moving = kind in ("video", "anim", "gen")
+        self.loop.setVisible(kind in ("video", "anim"))
+        self.video_audio.setVisible(kind == "video")
+        self.form.setRowVisible(self.speed, moving)
+        self.form.setRowVisible(self.react_row, is_media and kind != "none")
 
-        return f"animation: {media_label(media)}" if is_generative(media) else media
+    def _set_media(self, s, media):
+        s.media = media
+        self.state.surface_edited(s.id)
+        self._refresh_props(s.id)
+
+    def _type_chosen(self, _idx: int):
+        s = self.state.selected_surface
+        if self._loading or s is None:
+            return
+        kind = self.media_type.currentData()
+        cur = media_kind(s.media)
+        if kind == cur:
+            return
+        if kind == "none":
+            self._set_media(s, None)
+        elif kind == "gen":
+            self._set_media(s, make_media(self.anim_combo.currentData() or next(iter(EFFECTS))))
+        else:
+            path = self._pick_file(kind)
+            if path:
+                self._set_media(s, path)
+            else:  # cancelled: the combo goes back to what the surface really shows
+                self._loading = True
+                self.media_type.setCurrentIndex(self.media_type.findData(cur))
+                self._loading = False
+
+    def _anim_chosen(self, _idx: int):
+        s = self.state.selected_surface
+        if self._loading or s is None:
+            return
+        name = self.anim_combo.currentData()
+        if name and (not is_generative(s.media) or parse_media(s.media)[0].name != name):
+            self._set_media(s, make_media(name))
+
+    def _pick_file(self, kind: str) -> str | None:
+        start = str(self.state.project.base_dir)
+        path, _ = QFileDialog.getOpenFileName(self, f"Choose {dict((k, l) for l, k in MEDIA_TYPES)[kind].lower()}", start,
+                                              MEDIA_FILTERS.get(kind, MEDIA_FILTER))
+        return self.state.project.relativize_media(path) if path else None
 
     def _show_tint(self, tint):
         c = QColor.fromRgbF(*[max(0.0, min(1.0, v)) for v in tint])
@@ -420,18 +529,7 @@ class SurfacePanel(QWidget):
         s = self.state.selected_surface
         if s is None:
             return
-        start = str(self.state.project.base_dir)
-        path, _ = QFileDialog.getOpenFileName(self, "Choose media", start, MEDIA_FILTER)
-        if not path:
-            return
-        s.media = self.state.project.relativize_media(path)
-        self.media.setText(s.media)
-        self.state.surface_edited(s.id)
-
-    def _clear_media(self):
-        s = self.state.selected_surface
-        if s is None:
-            return
-        s.media = None
-        self.media.setText("")
-        self.state.surface_edited(s.id)
+        kind = media_kind(s.media)
+        path = self._pick_file(kind if kind in MEDIA_FILTERS else "image")
+        if path:
+            self._set_media(s, path)

@@ -22,6 +22,7 @@ class AppState(QObject):
     sceneChanged = Signal()  # 3D scene nodes / projector edited
     sceneSelectionChanged = Signal(object)  # "projector", a node id, or None
     view3dRequested = Signal(str)  # "open", "close", or a viewpoint name
+    windowRequested = Signal(str)  # "camera" | "animations": open that tool window
     cancelRequested = Signal()  # Esc: stop any pattern run and clear the override frame
     undoChanged = Signal()  # undo/redo stacks changed (menu enable state)
 

@@ -150,7 +150,7 @@ class EditorCanvas(QOpenGLWidget):
         painter.drawRect(QRectF(x, y, out_w * s, out_h * s))
         banner = None
         if self.state._override is not None:
-            banner = "Camera dock is projecting a pattern: surfaces are hidden until it finishes. Esc here, or Cancel / untick 'Show white' in the Camera tab"
+            banner = "Camera window is projecting a pattern: surfaces are hidden until it finishes. Esc here, or Cancel / untick 'Show white' in the Camera window"
         elif self.state.engine.blackout:
             banner = "BLACKOUT (B or Esc to clear)"
         elif self.state.engine.current_cue is not None and not any(self.state.engine.current_cue.media.values()):
@@ -310,6 +310,16 @@ class EditorCanvas(QOpenGLWidget):
         if ev.button() == Qt.MiddleButton or (ev.button() == Qt.LeftButton and ev.modifiers() & Qt.AltModifier):
             self._pan_drag = (pos, QPointF(self.pan))
             self.setCursor(Qt.ClosedHandCursor)
+            return
+        if ev.button() == Qt.RightButton and not self.lasso_mode:
+            hit = self._hit_surface(pos)
+            if hit:
+                self.state.select(hit[0])
+                from promap.ui.surface_menu import surface_menu
+
+                m = surface_menu(self.state, hit[0], self)
+                if m is not None:
+                    m.exec(ev.globalPosition().toPoint())
             return
         if ev.button() != Qt.LeftButton:
             return

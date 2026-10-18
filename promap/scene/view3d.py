@@ -57,15 +57,30 @@ def _clip_format() -> GeomVertexFormat:
 
 
 class View3D:
-    def __init__(self, state):
+    """The Panda3D scene. Standalone it is its own OS window; given `parent_handle` (a native
+    window id) it renders as a child window inside that widget, and `resize()` keeps it filling it."""
+
+    def __init__(self, state, parent_handle: int | None = None, size: tuple[int, int] | None = None):
         from direct.showbase.ShowBase import ShowBase
         from direct.gui.OnscreenText import OnscreenText
+        from panda3d.core import WindowProperties
 
         loadPrcFileData("", PRC)
         self.state = state
         self.alive = True
-        self.base = ShowBase()
+        self.embedded = parent_handle is not None
+        self.base = ShowBase(windowType="none")
         base = self.base
+        wp = WindowProperties.getDefault()
+        if size:
+            wp.setSize(*size)
+        if parent_handle is not None:
+            wp.setParentWindow(int(parent_handle))
+            wp.setOrigin(0, 0)
+            wp.setUndecorated(True)
+        base.openMainWindow(props=wp, type="onscreen")
+        if base.win is None:
+            raise RuntimeError("Panda3D could not open a window")
         base.disableMouse()
         base.setBackgroundColor(0.11, 0.11, 0.13)
         base.win.setCloseRequestEvent("promap-close3d")
@@ -94,8 +109,9 @@ class View3D:
         self._build_world()
         self._build_projector()
         self._ensure_buffer()
-        self.hud = OnscreenText(
-            text="", pos=(-1.3, 0.92), scale=0.045, fg=(1, 1, 1, 0.9), align=TextNode.ALeft, mayChange=True,
+        self.hud = OnscreenText(  # anchored to the top-left corner so any pane aspect keeps it on screen
+            text="", parent=base.a2dTopLeft, pos=(0.04, -0.09), scale=0.055, fg=(1, 1, 1, 0.9),
+            align=TextNode.ALeft, mayChange=True,
         )
         self._update_hud()
 
@@ -531,6 +547,22 @@ class View3D:
         except Exception:
             log.exception("3D view error; closing it")
             self.close()
+
+    def resize(self, w: int, h: int):
+        """Embedded only: follow the Qt container's size."""
+        if not self.alive or w < 8 or h < 8:
+            return
+        from panda3d.core import WindowProperties
+
+        wp = WindowProperties()
+        wp.setOrigin(0, 0)
+        wp.setSize(int(w), int(h))
+        self.base.win.requestProperties(wp)
+
+    def key(self, ch: str):
+        """Keyboard forwarded from the Qt container (an embedded child window rarely gets X focus)."""
+        if self.alive:
+            self.base.messenger.send(ch)
 
     def screenshot(self, path: str | Path):
         self.base.graphicsEngine.renderFrame()

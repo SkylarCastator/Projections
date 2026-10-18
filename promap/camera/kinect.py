@@ -271,7 +271,7 @@ def mask_to_contours(mask: np.ndarray, min_area: float = 300.0, epsilon: float =
 
 
 class KinectCameraAdapter:
-    """Presents the Kinect like capture.Camera so the Camera dock can calibrate and scan through it.
+    """Presents the Kinect like capture.Camera so the Camera window can calibrate and scan through it.
 
     `latest()` returns the colour image *registered onto the depth pixels* (512x424), so a
     Gray-code calibration done through this adapter maps depth pixels straight to projector
