@@ -346,6 +346,8 @@ class SurfacePanel(QWidget):
         s = self.state.selected_surface
         self.props.setEnabled(s is not None)
         if s is None:
+            for row in (self.media_type, self.media_pick, self.speed, self.react_row):
+                self.form.setRowVisible(row, False)
             return
         self._loading = True
         self.name.setText(s.name)

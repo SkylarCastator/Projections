@@ -56,11 +56,10 @@ def test_main_window_has_tool_palette_and_list_menu(state):
     tb.actions()[0].trigger()
     assert len(state.project.surfaces) == 1 and state.project.surfaces[0].kind == "media"
     edit = next(m for m in w.menuBar().findChildren(QMenu) if m.title() == "&Edit")
-    mirror = next(a for a in edit.actions() if a.text().startswith("Lasso"))
-    mirror.trigger()
-    assert w.canvas.lasso_mode and w.lasso_act.isChecked()
+    assert not any(a.text().startswith("Lasso") for a in edit.actions())  # palette only
+    w.lasso_act.setChecked(True)
+    assert w.canvas.lasso_mode
     w.lasso_act.setChecked(False)
-    assert not w.canvas.lasso_mode and not mirror.isChecked()
     assert w.surface_panel.list.contextMenuPolicy() == Qt.CustomContextMenu
     w.state.dirty = False
     w.close()
@@ -72,7 +71,11 @@ def test_docks_detachable_and_camera_detach(state):
 
     w = MainWindow(state)
     w.show()
-    assert set(w.docks) == {"Surfaces", "Cues", "Timeline"}
+    assert set(w.docks) == {"Surfaces"}
+    assert w.cues_window.isHidden() and w.cues_window.isWindow()
+    w.open_cues_window()
+    assert w.cues_window.isVisible() and {d.windowTitle() for d in w.cues_window.findChildren(QDockWidget)} == {"Cues", "Timeline"}
+    w.cues_window.close()
     for d in w.docks.values():
         assert d.features() & QDockWidget.DockWidgetFloatable and d.features() & QDockWidget.DockWidgetClosable
         assert d.objectName()
@@ -99,13 +102,28 @@ def test_3d_lives_in_view_menu(state):
     from promap.ui.main_window import MainWindow
 
     w = MainWindow(state)
-    titles = [m.title() for m in w.menuBar().findChildren(QMenu) if m.title().startswith("&")]
-    assert "&3D" not in titles and "&View" in titles
+    titles = [m.title() for m in w.menuBar().findChildren(QMenu) if m.title().startswith("&") or m.title().startswith("S&")]
+    assert "&3D" not in titles and "S&urface" not in titles and "&Hardware" not in titles and "&View" in titles
+    edit = next(m for m in w.menuBar().findChildren(QMenu) if m.title() == "&Edit")
+    assert any(a.text() == "Preferences…" for a in edit.actions())
+    gen = next(m for m in w.menuBar().findChildren(QMenu) if m.title() == "&Generate")
+    assert not any("Settings" in a.text() for a in gen.actions())
     view = next(m for m in w.menuBar().findChildren(QMenu) if m.title() == "&View")
     texts = [a.text() for a in view.actions()]
-    assert "3D scene tab" in texts and "3D scene in its own window" in texts and "Animations window" in texts
-    assert w.view3d_act.isCheckable() and not w.view3d_act.isChecked()
+    assert "Animations window" in texts and "Camera window" in texts and "Cues & timeline window" in texts
+    assert not any("3D" in t or "Zoom" in t for t in texts)  # those live in the viewer strip / shortcuts
+    assert w.view3d_act.isCheckable() and not w.view3d_act.isChecked() and w.view3d_act.shortcut().toString() == "F3"
     assert w.stack.currentWidget() is w.canvas
+    shown = lambda: [a.text() for a in w.view_bar.actions() if a.isVisible() and a.text()]
+    assert [t for t in shown() if t in ("−", "+", "Fit")] == ["−", "+", "Fit"]
+    assert "Orbit" not in shown()
+    w.tabs.setCurrentIndex(2)
+    assert "Orbit" in shown() and "Pop out ↗" in shown() and "Fit" not in shown()
+    w.tabs.setCurrentIndex(0)
+    assert "Fit" in shown() and "Orbit" not in shown()
+    z = w.canvas.zoom
+    next(a for a in w.view_bar.actions() if a.text() == "+").trigger()
+    assert w.canvas.zoom > z
     w.state.dirty = False
     w.close()
 
@@ -164,3 +182,15 @@ def test_open_view3d_builds_one_instance(state, monkeypatch):
     assert w.view3d is None and w._tab_kind() != "3d"
     w.state.dirty = False
     w.close()
+
+
+def test_preferences_dialog_tabs(state):
+    from promap.model.hardware import HardwareLibrary
+    from promap.model.settings import Settings
+    from promap.ui.preferences_dialog import PreferencesDialog
+
+    d = PreferencesDialog(state, HardwareLibrary(), Settings(), tab="Generation")
+    assert [d.tabs.tabText(i) for i in range(d.tabs.count())] == ["Hardware", "Generation"]
+    assert d.tabs.currentIndex() == 1 and d.generation_page.url.text()
+    d.generation_page.reject()  # the page's Cancel closes the whole dialog
+    assert d.result() == 0 and d.isHidden()

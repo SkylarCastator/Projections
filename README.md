@@ -71,7 +71,7 @@ drag is one step however long it lasts; slider-style edits that land within 0.4 
 other merge into one step; the live People surface and other camera-driven updates never
 enter the history. Up to 200 steps are kept; loading a project clears them.
 
-**Lasso tool (L).** **⌇** in the tool palette, Edit → Lasso, or press **L** in the canvas. Drag freehand round an
+**Lasso tool (L).** **⌇** in the tool palette, or press **L** in the canvas. Drag freehand round an
 object, or click out the corners one by one, then double-click or press Enter to close
 the loop (Esc cancels). The outline is simplified and triangulated into a new mesh
 surface named `Lasso n`, ready for media like any other mesh. It is the quick way to
@@ -79,15 +79,20 @@ trace a prop by eye off a reference photo or the projected test pattern when the
 isn't set up.
 
 **Viewer tabs.** Above the viewer: one tab per output screen, **All** (every output in
-one view) and **3D**. The 3D tab shows the Panda3D scene in place of the canvas and brings
-the **3D scene** dock forward; a screen tab brings **Surfaces** back.
+one view) and **3D**. The 3D tab shows the Panda3D scene in place of the canvas and turns
+the side panel into **3D scene**; a screen tab turns it back into **Surfaces**. The strip
+under the tabs holds the view's own controls, Unity style: zoom −/+/Fit on a screen tab
+(Ctrl+-, Ctrl++, Ctrl+0 also work), and Orbit / Projector / Reset / Grid / Pop out on the
+3D tab.
 
-**Panels and windows.** Surfaces, 3D scene, Cues and Timeline are dock panels. Drag one
+**Panels and windows.** The side panel (Surfaces / 3D scene) is a dock. Drag one
 out by its title bar, or double-click the title, and it becomes its own window; close any
 of them and bring it back from **View → Panels**; **Reset panel layout** puts everything
 back. Camera and Animations are separate windows from the start: **View → Camera window**
 (Ctrl+Shift+C) and **View → Animations window** (Ctrl+Shift+A) open them beside the
-editor, and they can sit on a second screen. Window positions are remembered between runs.
+editor, **View → Cues & timeline window** (Ctrl+Shift+U) opens the playable content below
+it, and any of them can sit on a second screen. Window positions, and which were open,
+are remembered between runs.
 
 ## Triangle meshes
 
@@ -320,14 +325,14 @@ git clone https://github.com/ltdrdata/ComfyUI-Manager custom_nodes/ComfyUI-Manag
 python main.py --listen 0.0.0.0 --port 8188
 ```
 
-Then in promap **Generate → Settings…** set the URL (`http://<gpu-box>:8188`) and press
+Then in promap **Edit → Preferences… → Generation** set the URL (`http://<gpu-box>:8188`) and press
 *Test connection*. Model names change monthly: in ComfyUI's manager, pick a current
 image-to-video model, build the workflow, title the nodes, export API format.
 Generated audio (ambience, SFX) will use the same template mechanism later.
 
 ## Hardware library
 
-**Hardware → Library… (Ctrl+H)** keeps your projectors, cameras and depth sensors with
+**Edit → Preferences… → Hardware** (Ctrl+,) keeps your projectors, cameras and depth sensors with
 their parameters (resolution, throw ratio or field of view, depth range, notes) outside
 any project, in `~/.local/share/promap/hardware.json` (or `$PROMAP_HARDWARE`). It is
 seeded with Kinect v2, Kinect v1 and a generic 1080p projector. *Use as this project's
@@ -336,9 +341,9 @@ selected 3D camera* does the same for a camera node.
 
 ## 3D scene view (Panda3D)
 
-The **3D** tab above the viewer (or **View → 3D scene tab**, F3) shows the Panda3D scene
-in place of the 2D canvas; F3 again closes it. **View → 3D scene in its own window** gives
-a separate window instead (for a second screen). The
+The **3D** tab above the viewer (or F3) shows the Panda3D scene in place of the 2D canvas;
+F3 again closes it. **Pop out** in the strip above the scene moves it to a separate window
+(for a second screen). The
 **3D scene** dock (tabbed behind Surfaces) edits the projector's pose and horizontal field of view (the
 throw ratio is shown next to it), extra cameras such as a Kinect, and props: box, plane,
 or any model file (obj / gltf / stl / egg via Assimp). Units are metres, Z up, +Y forward.
@@ -347,7 +352,7 @@ The live 2D output is projected from the projector's frustum onto the props, so 
 orbit the scene, look **through the projector** (what the lens sees) or **through a
 camera** offset from it (what the Kinect would see). Keys in the 3D tab (click it first):
 `1` orbit, `2` projector, `3`..`9` cameras, `f` reset, `g` grid; drag to rotate, right-drag
-to pan, wheel to zoom. Orbit and projector views are also under **View**.
+to pan, wheel to zoom. Orbit and projector views are also buttons in the strip above it.
 
 ## Architecture
 

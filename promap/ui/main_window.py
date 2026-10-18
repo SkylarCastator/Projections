@@ -20,11 +20,10 @@ from promap.ui.scene_panel import ScenePanel
 from promap.ui.camera_panel import CameraPanel
 from promap.ui.animation_panel import AnimationPanel
 from promap.ui.timeline_panel import TimelinePanel
-from promap.ui.hardware_dialog import HardwareDialog
+from promap.ui.preferences_dialog import PreferencesDialog
 from promap.model.hardware import HardwareLibrary
 from promap.audio.engine import AudioEngine
 from promap.model.settings import Settings
-from promap.ui.settings_dialog import SettingsDialog
 from promap.ui.generate_dialog import GenerateDialog
 
 PROJECT_FILTER = "promap project (*.promap *.json)"
@@ -59,6 +58,7 @@ class MainWindow(QMainWindow):
         cl.setContentsMargins(0, 0, 0, 0)
         cl.setSpacing(0)
         cl.addWidget(self.tabs)
+        cl.addWidget(self._build_view_bar())
         cl.addWidget(self.stack, 1)
         self.setCentralWidget(central)
         self._refresh_tabs()
@@ -113,11 +113,25 @@ class MainWindow(QMainWindow):
         self.animations_window = tool_window("Animations", self.animation_panel, (520, 800))
         dock.raise_()
 
-        cdock = dock_for("Cues", CuePanel(state), Qt.BottomDockWidgetArea)
+        # Cues and Timeline (the playable content) live in their own window, opened from View.
+        self.cue_panel = CuePanel(state)
         self.timeline_panel = TimelinePanel(state)
-        dock_for("Timeline", self.timeline_panel, Qt.BottomDockWidgetArea, cdock)
-        cdock.raise_()
-        self.resizeDocks([cdock], [220], Qt.Vertical)
+        self.cues_window = QMainWindow(self, Qt.Window)
+        self.cues_window.setWindowTitle("promap — Cues & Timeline")
+        self.cues_window.setObjectName("cues_window")
+        self.cues_window.resize(1100, 420)
+        cues_docks = []
+        for title, widget in (("Cues", self.cue_panel), ("Timeline", self.timeline_panel)):
+            d = QDockWidget(title, self.cues_window)
+            d.setObjectName("cuesdock_" + title.lower())
+            d.setWidget(widget)
+            d.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
+            self.cues_window.addDockWidget(Qt.TopDockWidgetArea, d)
+            if cues_docks:
+                self.cues_window.tabifyDockWidget(cues_docks[0], d)
+            cues_docks.append(d)
+        cues_docks[0].raise_()
+        self.cues_window.hide()
         self._default_layout = self.saveState()
 
         self._build_tools()  # before the menus: Edit reuses the lasso action
@@ -192,12 +206,18 @@ class MainWindow(QMainWindow):
     def open_animations_window(self):
         self._open_tool_window(self.animations_window)
 
+    def open_cues_window(self):
+        self._open_tool_window(self.cues_window)
+
     def _open_tool_window(self, w: QMainWindow):
         """Show a tool window; first time, place it beside the editor at the editor's height."""
         if not w.isVisible():
             if not w.property("placed"):
-                w.resize(w.width(), max(700, self.height() - 40))
-                w.move(self.frameGeometry().right() + 8, self.frameGeometry().top())
+                if w is self.cues_window:
+                    w.move(self.frameGeometry().left(), self.frameGeometry().bottom() + 8)
+                else:
+                    w.resize(w.width(), max(700, self.height() - 40))
+                    w.move(self.frameGeometry().right() + 8, self.frameGeometry().top())
                 w.setProperty("placed", True)
             w.show()
         w.raise_()
@@ -221,18 +241,24 @@ class MainWindow(QMainWindow):
             self.restoreGeometry(geo)
         if st is not None:
             self.restoreState(st)
-        for key, w in (("camera/geometry", self.camera_window), ("animations/geometry", self.animations_window)):
-            g = qs.value(key)
+        for key, w in self._tool_windows():
+            g = qs.value(f"{key}/geometry")
             if g is not None:
                 w.restoreGeometry(g)
                 w.setProperty("placed", True)
+            if qs.value(f"{key}/open", False, type=bool):
+                w.show()
+
+    def _tool_windows(self):
+        return (("camera", self.camera_window), ("animations", self.animations_window), ("cues", self.cues_window))
 
     def save_layout(self):
         qs = self._qsettings()
         qs.setValue("window/geometry", self.saveGeometry())
         qs.setValue("window/state", self.saveState())
-        qs.setValue("camera/geometry", self.camera_window.saveGeometry())
-        qs.setValue("animations/geometry", self.animations_window.saveGeometry())
+        for key, w in self._tool_windows():
+            qs.setValue(f"{key}/geometry", w.saveGeometry())
+            qs.setValue(f"{key}/open", w.isVisible())
 
     # -- menus -------------------------------------------------------------------
     def _act(self, menu, text, fn, shortcut=None, checkable=False):
@@ -262,20 +288,9 @@ class MainWindow(QMainWindow):
         self.state.undoChanged.connect(self._undo_state)
         self._undo_state()
         e.addSeparator()
-        lasso_menu = QAction("Lasso tool  (draw a shape, get a mesh)", self)  # mirrors the palette button
-        lasso_menu.setCheckable(True)
-        lasso_menu.triggered.connect(lambda checked=False: self.lasso_act.setChecked(bool(checked)))
-        self.lasso_act.toggled.connect(lasso_menu.setChecked)
-        e.addAction(lasso_menu)
+        self._act(e, "Preferences…", self._preferences, "Ctrl+,")
 
         vw = mb.addMenu("&View")
-        self._act(vw, "Zoom in", lambda: self.canvas.zoom_by(1.25), "Ctrl++")
-        self._act(vw, "Zoom out", lambda: self.canvas.zoom_by(0.8), "Ctrl+-")
-        self._act(vw, "Zoom to fit", self.canvas.zoom_fit, "Ctrl+0")
-        vw.addSeparator()
-        hint = vw.addAction("Wheel zooms the canvas; middle-drag or Alt-drag pans; Ctrl+wheel zooms the camera preview and timeline")
-        hint.setEnabled(False)
-        vw.addSeparator()
         panels = vw.addMenu("Panels")
         for title, d in self.docks.items():
             panels.addAction(d.toggleViewAction())
@@ -284,12 +299,26 @@ class MainWindow(QMainWindow):
         hint2.setEnabled(False)
         self._act(vw, "Camera window", self.open_camera_window, "Ctrl+Shift+C")
         self._act(vw, "Animations window", self.open_animations_window, "Ctrl+Shift+A")
+        self._act(vw, "Cues & timeline window", self.open_cues_window, "Ctrl+Shift+U")
         self._act(vw, "Reset panel layout", self.reset_layout)
-        vw.addSeparator()
-        self.view3d_act = self._act(vw, "3D scene tab", self.toggle_view3d, "F3", checkable=True)
-        self._act(vw, "3D scene in its own window", lambda: self.open_view3d(embedded=False))
-        self._act(vw, "3D: orbit  (1)", lambda: self._set_view3d("orbit"))
-        self._act(vw, "3D: through projector  (2)", lambda: self._set_view3d("projector"))
+        # Keyboard-only actions (the buttons live in the strip at the top of the viewer)
+        for text, fn, key, checkable in [
+            ("Zoom in", lambda: self.canvas.zoom_by(1.25), "Ctrl++", False),
+            ("Zoom in (alt)", lambda: self.canvas.zoom_by(1.25), "Ctrl+=", False),
+            ("Zoom out", lambda: self.canvas.zoom_by(0.8), "Ctrl+-", False),
+            ("Zoom to fit", self.canvas.zoom_fit, "Ctrl+0", False),
+            ("3D scene tab", self.toggle_view3d, "F3", True),
+        ]:
+            a = QAction(text, self)
+            a.setShortcut(QKeySequence(key))
+            a.setShortcutContext(Qt.WindowShortcut)
+            if checkable:
+                a.setCheckable(True)
+                a.toggled.connect(fn)
+                self.view3d_act = a
+            else:
+                a.triggered.connect(lambda *_, f=fn: f())
+            self.addAction(a)
         self.state.view3dRequested.connect(self._view3d_request)
         self.state.windowRequested.connect(self._window_request)
 
@@ -314,31 +343,8 @@ class MainWindow(QMainWindow):
         self.state.showChanged.connect(lambda: self.blackout_act.setChecked(self.state.engine.blackout))
         self.state.showChanged.connect(lambda: self.pattern_act.setChecked(self.state.test_pattern))
 
-        su = mb.addMenu("S&urface")
-        self._act(su, "Add quad", lambda: self.state.add_surface("media"))
-        self._act(su, "Add triangle", lambda: self.state.add_surface("media", mesh="triangle"), "Ctrl+T")
-        self._act(su, "Add square (2 triangles)", lambda: self.state.add_surface("media", mesh="square"))
-        self._act(su, "Add mask", lambda: self.state.add_surface("mask"))
-        su.addSeparator()
-        self._act(su, "Convert quad to mesh (4x4)", lambda: self.state.convert_to_mesh(n=4), "Ctrl+M")
-        self._act(su, "Convert mesh to quad", self.state.convert_to_quad)
-        su.addSeparator()
-        self._act(su, "Extrude triangle from edge  (A in canvas)", self.state.extrude)
-        self._act(su, "Delete triangle  (Delete in canvas)", self.state.delete_triangle)
-        self._act(su, "Detach triangle", self.state.detach_triangle)
-        self._act(su, "Subdivide", self.state.subdivide)
-        self._act(su, "Weld vertices", self.state.weld)
-        self._act(su, "Merge with mesh above", self.state.merge_with_above)
-        self._act(su, "Fit UVs to bounds", self.state.fit_uvs)
-        self.uv_act = self._act(su, "UV view  (U in canvas)", self.state.set_uv_mode, checkable=True)
-        self.state.selectionChanged.connect(lambda _: self.uv_act.setChecked(self.state.uv_mode))
-
-        hw = mb.addMenu("&Hardware")
-        self._act(hw, "Library…", self._hardware, "Ctrl+H")
-
         g = mb.addMenu("&Generate")
         self._act(g, "Generate media with ComfyUI…", self._generate, "Ctrl+G")
-        self._act(g, "Settings…", self._settings)
 
 
     def _fill_screens(self):
@@ -408,11 +414,14 @@ class MainWindow(QMainWindow):
     def _generate(self):
         GenerateDialog(self.state, self.settings, self).exec()
 
+    def _preferences(self, tab: str = "Hardware"):
+        PreferencesDialog(self.state, self.hardware, self.settings, self, tab=tab).exec()
+
     def _settings(self):
-        SettingsDialog(self.settings, self).exec()
+        self._preferences("Generation")
 
     def _hardware(self):
-        HardwareDialog(self.state, self.hardware, self).exec()
+        self._preferences("Hardware")
 
     # -- 3D view ------------------------------------------------------------------------
     def open_view3d(self, embedded: bool = True):
@@ -471,6 +480,72 @@ class MainWindow(QMainWindow):
         else:
             self.close_view3d()
 
+    # -- viewer strip -------------------------------------------------------------------
+    def _build_view_bar(self) -> QToolBar:
+        """Controls that belong to the view itself, Unity style: a strip along the top of the
+        viewer whose buttons change with the tab (zoom for the 2D canvas, viewpoints for 3D)."""
+        bar = QToolBar("View tools", self)
+        bar.setObjectName("view_bar")
+        bar.setMovable(False)
+        bar.setFloatable(False)
+        bar.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        bar.setStyleSheet("QToolBar { border: 0; padding: 1px 4px; spacing: 2px; } QToolButton { padding: 2px 8px; }")
+        self.view_bar = bar
+        self._bar_2d: list[QAction] = []
+        self._bar_3d: list[QAction] = []
+
+        def btn(group, text, tip, fn, checkable=False):
+            a = QAction(text, self)
+            a.setToolTip(tip)
+            a.setStatusTip(tip)
+            if checkable:
+                a.setCheckable(True)
+                a.toggled.connect(fn)
+            else:
+                a.triggered.connect(lambda *_: fn())
+            bar.addAction(a)
+            group.append(a)
+            return a
+
+        def label(group, text, tip=""):
+            lab = QLabel(text)
+            lab.setStyleSheet("color: #888; padding: 0 6px;")
+            lab.setToolTip(tip)
+            a = bar.addWidget(lab)
+            group.append(a)
+            return lab
+
+        # 2D canvas
+        btn(self._bar_2d, "−", "Zoom out  (Ctrl+-, or wheel)", lambda: self.canvas.zoom_by(0.8))
+        self.zoom_label = label(self._bar_2d, "100%", "Canvas zoom relative to fit")
+        btn(self._bar_2d, "+", "Zoom in  (Ctrl++, or wheel)", lambda: self.canvas.zoom_by(1.25))
+        btn(self._bar_2d, "Fit", "Zoom to fit the output in the canvas  (Ctrl+0)", self.canvas.zoom_fit)
+        self._bar_2d.append(bar.addSeparator())
+        label(self._bar_2d, "wheel zooms · middle-drag or Alt-drag pans · L lasso",
+              "Ctrl+wheel zooms the camera preview and the timeline")
+        # 3D scene
+        btn(self._bar_3d, "Orbit", "Free orbit  (1)", lambda: self._set_view3d("orbit"))
+        btn(self._bar_3d, "Projector", "Look through the projector's lens  (2)", lambda: self._set_view3d("projector"))
+        btn(self._bar_3d, "Reset", "Reset the orbit camera  (f)", lambda: self._view3d_call("_reset_orbit"))
+        btn(self._bar_3d, "Grid", "Show / hide the floor grid  (g)", lambda: self._view3d_call("_toggle_grid"))
+        self._bar_3d.append(bar.addSeparator())
+        btn(self._bar_3d, "Pop out ↗", "Move the 3D scene to its own window (for a second screen)",
+            lambda: self.open_view3d(embedded=False))
+        label(self._bar_3d, "drag rotates · right-drag pans · wheel zooms · 3..9 cameras")
+        self._refresh_view_bar("output")
+        return bar
+
+    def _refresh_view_bar(self, kind: str | None):
+        three = kind == "3d"
+        for a in self._bar_2d:
+            a.setVisible(not three)
+        for a in self._bar_3d:
+            a.setVisible(three)
+
+    def _view3d_call(self, method: str):
+        if self.view3d is not None and self.view3d.alive:
+            getattr(self.view3d, method)()
+
     # -- viewer tabs ------------------------------------------------------------------
     def _output_labels(self) -> list[str]:
         """One label per output screen. The project has one output today; this is the seam
@@ -516,6 +591,7 @@ class MainWindow(QMainWindow):
 
     def _tab_changed(self, index: int):
         kind = self._tab_kind(index)
+        self._refresh_view_bar(kind)
         if kind == "3d":
             self.stack.setCurrentWidget(self.view3d_widget)
             self._show_side("scene")
@@ -625,6 +701,10 @@ class MainWindow(QMainWindow):
             self.fps_label.setText(msg)
             self._fps_t, self._fps_n = now, 0
             self._refresh_tabs()
+        if self.zoom_label.isVisible():
+            pct = f"{self.canvas.zoom * 100:.0f}%"
+            if self.zoom_label.text() != pct:
+                self.zoom_label.setText(pct)
 
     def closeEvent(self, ev: QCloseEvent):
         if not self._confirm_discard():
@@ -634,7 +714,7 @@ class MainWindow(QMainWindow):
         self.close_output()
         self.close_view3d()
         self.camera_panel.shutdown()
-        self.camera_window.close()
-        self.animations_window.close()
+        for _, w in self._tool_windows():
+            w.close()
         self.audio.close()
         super().closeEvent(ev)
