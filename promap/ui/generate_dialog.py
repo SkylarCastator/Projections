@@ -361,7 +361,7 @@ class GenerateDialog(QDialog):
             return
         media = self.state.editor_assignments()
         media[s.id] = rel
-        cue = Cue(name=f"Generated: {s.name}", media=media)
+        cue = Cue.from_assignments(f"Generated: {s.name}", media)
         self.state.project.cues.append(cue)
         self.state.cues_edited()
         self._logln(f"added cue '{cue.name}'")

@@ -39,8 +39,9 @@ uv pip install -e ".[dev]"
    surface, in the list or in the canvas, for Duplicate, Delete, Bring to front / Move
    up / Move down / Send to back, and Lock. Delete in the list removes the selected one.
 5. **Cues**: set each surface's media the way a moment of the show should look, then
-   **Add from editor**. Each cue stores one media path (or none = dark) per surface,
-   a crossfade length and an optional hold time for auto-advance.
+   **Add from editor** in the Cues window. A cue is a sequence of clips per surface with
+   fades (see *Cues as sequences*); a crossfade length and an optional hold time for
+   auto-advance sit on the cue.
 6. **GO (Space)** / **Back (Backspace)** step through cues. **Preview mode** drops
    back to the editor's own assignments. **B** blackout. **Esc** in the canvas clears
    anything that hides the surfaces: a blackout, a calibration or scan in progress, the
@@ -253,16 +254,30 @@ vaporwave grid, flow fields, metaballs, ray-marched fractal. Adding one is a GLS
 in `promap/media/gen_shaders.py` plus a spec line in `promap/media/generative.py`; the test
 suite compiles every effect and checks that it moves.
 
-## Timeline
+## Cues as sequences (the cue editor)
 
-The **Timeline** tab (beside Cues) lays the cue list out on a time axis like a video
-editor: one track per surface, one column per cue, as wide as the cue's hold (a cue that
-waits for GO is hatched at a default width). Cells show what each surface plays in that
-cue, colour-coded by animation family or file. Click a cell to select the surface and jump
-the show to that cue; drag the right edge of a cue header to change its hold; double-click
-the header to rename; right-click a cell for a menu (animation, file, same as editor, dark)
-and a cue for hold / duplicate / delete. Ctrl + wheel zooms. A red playhead runs while a
-held cue counts down.
+A cue is a sequence, edited like a video timeline in **View → Cues window** (Ctrl+Shift+U):
+one track per media surface, clips along a time axis, a ruler with a playhead. A clip is one
+piece of media (image, video, GIF, built-in animation, or a deliberate dark stretch) on one
+surface from a start time for a length, with its own fade-in and fade-out. The cue has a
+length; when the playhead reaches it the sequence loops, unless the cue has a hold time, in
+which case the show advances to the next cue. Firing a cue (GO, a pad later) fades the
+previous cue's layers out over the new cue's **Fade**.
+
+Everything in the editor plays live on the canvas and the output: picking a cue fires it,
+paused at 0; dragging the ruler scrubs; Space plays. Drag a clip to move it (onto another
+track too); drag its ends to trim; drag the small squares on its top corners to set the
+fades; double-click an empty track to drop the surface's editor media there; right-click a
+clip for its media (animation list, file, editor media, dark), split at the playhead,
+duplicate, delete; right-click a track to add; right-click anywhere for cue length and
+loop. The inspector row edits the selected clip's numbers, and **Parameters…** opens the
+Animations window on an animation clip. Keys: Space, Home, ←/→ nudge, S split, Delete.
+Ctrl+wheel zooms.
+
+The **Cue list** dock beside it keeps the flat list: name, fade, hold, soundtrack and gain;
+**Add from editor** still makes a cue from each surface's current media (one full-length
+clip per surface), and **Load into editor** puts the clips under the playhead back onto the
+surfaces. Old projects load unchanged: a per-surface media map becomes full-length clips.
 
 ## Demo media
 

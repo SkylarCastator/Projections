@@ -153,7 +153,7 @@ class EditorCanvas(QOpenGLWidget):
             banner = "Camera window is projecting a pattern: surfaces are hidden until it finishes. Esc here, or Cancel / untick 'Show white' in the Camera window"
         elif self.state.engine.blackout:
             banner = "BLACKOUT (B or Esc to clear)"
-        elif self.state.engine.current_cue is not None and not any(self.state.engine.current_cue.media.values()):
+        elif self.state.engine.current_cue is not None and not any(c.media for c in self.state.engine.current_cue.clips):
             banner = f"cue '{self.state.engine.current_cue.name}' assigns no media: everything is dark by design (Preview mode shows the editor's media)"
         if banner:
             painter.setPen(Qt.NoPen)

@@ -74,7 +74,8 @@ def test_docks_detachable_and_camera_detach(state):
     assert set(w.docks) == {"Surfaces"}
     assert w.cues_window.isHidden() and w.cues_window.isWindow()
     w.open_cues_window()
-    assert w.cues_window.isVisible() and {d.windowTitle() for d in w.cues_window.findChildren(QDockWidget)} == {"Cues", "Timeline"}
+    assert w.cues_window.isVisible() and {d.windowTitle() for d in w.cues_window.findChildren(QDockWidget)} == {"Cue list"}
+    assert w.cues_window.centralWidget() is w.cue_editor
     w.cues_window.close()
     for d in w.docks.values():
         assert d.features() & QDockWidget.DockWidgetFloatable and d.features() & QDockWidget.DockWidgetClosable
@@ -110,7 +111,7 @@ def test_3d_lives_in_view_menu(state):
     assert not any("Settings" in a.text() for a in gen.actions())
     view = next(m for m in w.menuBar().findChildren(QMenu) if m.title() == "&View")
     texts = [a.text() for a in view.actions()]
-    assert "Animations window" in texts and "Camera window" in texts and "Cues & timeline window" in texts
+    assert "Animations window" in texts and "Camera window" in texts and "Cues window" in texts
     assert not any("3D" in t or "Zoom" in t for t in texts)  # those live in the viewer strip / shortcuts
     assert w.view3d_act.isCheckable() and not w.view3d_act.isChecked() and w.view3d_act.shortcut().toString() == "F3"
     assert w.stack.currentWidget() is w.canvas

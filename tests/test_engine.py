@@ -31,8 +31,8 @@ def test_crossfade_between_cues(tmp_path):
     p = Project(path=tmp_path / "show.json")
     s = Surface(name="S", media="a.png")
     p.surfaces.append(s)
-    p.cues.append(Cue(name="A", media={s.id: "a.png"}, fade=0.0))
-    p.cues.append(Cue(name="B", media={s.id: "b.png"}, fade=1.0))
+    p.cues.append(Cue.from_assignments("A", {s.id: "a.png"}, fade=0.0))
+    p.cues.append(Cue.from_assignments("B", {s.id: "b.png"}, fade=1.0))
     eng = ShowEngine(p)
     # preview mode shows surface.media
     items = eng.render_items()
@@ -65,7 +65,7 @@ def test_hold_auto_advances(tmp_path):
     p = Project(path=tmp_path / "show.json")
     s = Surface(name="S")
     p.surfaces.append(s)
-    p.cues += [Cue(name="1", media={s.id: "a.png"}, hold=0.5), Cue(name="2", media={s.id: None})]
+    p.cues += [Cue.from_assignments("1", {s.id: "a.png"}, hold=0.5), Cue.from_assignments("2", {s.id: None})]
     eng = ShowEngine(p)
     eng.goto(0)
     eng.tick(eng._cue_entered_at + 0.1)

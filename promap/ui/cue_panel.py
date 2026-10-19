@@ -136,7 +136,7 @@ class CuePanel(QWidget):
 
     def _add(self):
         cues = self.state.project.cues
-        cue = Cue(name=f"Cue {len(cues) + 1}", media=self.state.editor_assignments())
+        cue = Cue.from_assignments(f"Cue {len(cues) + 1}", self.state.editor_assignments())
         at = self._selected_row()
         cues.insert(len(cues) if at is None else at + 1, cue)
         self.state.cues_edited()
@@ -146,7 +146,7 @@ class CuePanel(QWidget):
         r = self._selected_row()
         if r is None:
             return
-        self.state.project.cues[r].media = self.state.editor_assignments()
+        self.state.project.cues[r].set_assignments(self.state.editor_assignments())
         self.state.cues_edited()
         if self.state.engine.cue_index == r:
             self.state.goto(r)

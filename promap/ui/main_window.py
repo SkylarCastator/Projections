@@ -19,7 +19,7 @@ from promap.ui.surface_panel import SurfacePanel
 from promap.ui.scene_panel import ScenePanel
 from promap.ui.camera_panel import CameraPanel
 from promap.ui.animation_panel import AnimationPanel
-from promap.ui.timeline_panel import TimelinePanel
+from promap.ui.cue_editor import CueEditor
 from promap.ui.preferences_dialog import PreferencesDialog
 from promap.model.hardware import HardwareLibrary
 from promap.audio.engine import AudioEngine
@@ -113,24 +113,20 @@ class MainWindow(QMainWindow):
         self.animations_window = tool_window("Animations", self.animation_panel, (520, 800))
         dock.raise_()
 
-        # Cues and Timeline (the playable content) live in their own window, opened from View.
+        # Cues and the cue editor (the playable content) live in their own window, opened from View.
         self.cue_panel = CuePanel(state)
-        self.timeline_panel = TimelinePanel(state)
+        self.cue_editor = CueEditor(state)
         self.cues_window = QMainWindow(self, Qt.Window)
-        self.cues_window.setWindowTitle("promap — Cues & Timeline")
+        self.cues_window.setWindowTitle("promap — Cues")
         self.cues_window.setObjectName("cues_window")
-        self.cues_window.resize(1100, 420)
-        cues_docks = []
-        for title, widget in (("Cues", self.cue_panel), ("Timeline", self.timeline_panel)):
-            d = QDockWidget(title, self.cues_window)
-            d.setObjectName("cuesdock_" + title.lower())
-            d.setWidget(widget)
-            d.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
-            self.cues_window.addDockWidget(Qt.TopDockWidgetArea, d)
-            if cues_docks:
-                self.cues_window.tabifyDockWidget(cues_docks[0], d)
-            cues_docks.append(d)
-        cues_docks[0].raise_()
+        self.cues_window.resize(1400, 520)
+        self.cues_window.setCentralWidget(self.cue_editor)
+        cue_dock = QDockWidget("Cue list", self.cues_window)
+        cue_dock.setObjectName("cuesdock_list")
+        cue_dock.setWidget(self.cue_panel)
+        cue_dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
+        self.cues_window.addDockWidget(Qt.LeftDockWidgetArea, cue_dock)
+        self.cues_window.resizeDocks([cue_dock], [520], Qt.Horizontal)
         self.cues_window.hide()
         self._default_layout = self.saveState()
 
@@ -299,7 +295,7 @@ class MainWindow(QMainWindow):
         hint2.setEnabled(False)
         self._act(vw, "Camera window", self.open_camera_window, "Ctrl+Shift+C")
         self._act(vw, "Animations window", self.open_animations_window, "Ctrl+Shift+A")
-        self._act(vw, "Cues & timeline window", self.open_cues_window, "Ctrl+Shift+U")
+        self._act(vw, "Cues window", self.open_cues_window, "Ctrl+Shift+U")
         self._act(vw, "Reset panel layout", self.reset_layout)
         # Keyboard-only actions (the buttons live in the strip at the top of the viewer)
         for text, fn, key, checkable in [

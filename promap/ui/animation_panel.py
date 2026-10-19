@@ -146,10 +146,7 @@ class AnimationPanel(QWidget):
     def _target_media(self) -> str | None:
         """The selected surface's media as it is right now (editor or running cue)."""
         s = self.state.selected_surface
-        if s is None:
-            return None
-        cue = self.state.engine.current_cue
-        return cue.media.get(s.id) if cue is not None else s.media
+        return self.state.cue_media_for(s.id) if s is not None else None
 
     def _follow_selection(self, sid):
         if not self.follow.isChecked():
@@ -248,6 +245,6 @@ class AnimationPanel(QWidget):
         from promap.model.project import Cue
 
         p = self.state.project
-        cue = Cue(name=f"Cue {len(p.cues) + 1}", media=self.state.editor_assignments())
+        cue = Cue.from_assignments(f"Cue {len(p.cues) + 1}", self.state.editor_assignments())
         p.cues.append(cue)
         self.state.cues_edited()

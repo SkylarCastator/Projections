@@ -241,7 +241,8 @@ class AppState(QObject):
         if s is None:
             return
         cue = self.engine.current_cue
-        target = cue.media.get(sid) if cue is not None else s.media
+        clip = cue.clip_at(sid, self.engine.cue_time()) if cue is not None else None
+        target = clip.media if cue is not None else s.media
         if not is_generative(target):
             return
         eff, cur = parse_media(target)
@@ -249,7 +250,7 @@ class AppState(QObject):
         for src in self.live_sources(sid):
             src.set_params(params)
         if cue is not None:
-            cue.media[sid] = new
+            clip.media = new
             # keep the layer's media string in step so refresh() does not restart it
             for l in self.engine.layers:
                 if l.surface_id == sid and l.fade_out_at is None:
@@ -271,7 +272,7 @@ class AppState(QObject):
             return
         cue = self.engine.current_cue
         if cue is not None:
-            cue.media[sid] = media
+            cue.set_track(sid, media)
             self.engine.refresh()
             self.cues_edited()
         else:
@@ -436,14 +437,36 @@ class AppState(QObject):
 
     def load_cue_into_editor(self, index: int):
         cue = self.project.cues[index]
+        t = self.engine.cue_time() if self.engine.current_cue is cue else 0.0
         for s in self.project.surfaces:
             if s.kind == "media":
-                s.media = cue.media.get(s.id)
+                s.media = cue.media_at(s.id, t)
         self.engine.cue_index = -1
         self.surface_edited(None)
         self.showChanged.emit()
 
     # -- show control --------------------------------------------------------
+    def cue_media_for(self, sid: str) -> str | None:
+        """What a surface shows right now: the clip under the cue clock, or its editor media."""
+        cue = self.engine.current_cue
+        if cue is not None:
+            return cue.media_at(sid, self.engine.cue_time())
+        s = self.project.surface_by_id(sid)
+        return s.media if s is not None else None
+
+    def fire_cue(self, index: int, at: float = 0.0, paused: bool = False):
+        """Start a cue at a point in its sequence, optionally paused (the editor's way in)."""
+        self.engine.goto(index, at=at, paused=paused)
+        self.showChanged.emit()
+
+    def seek(self, t: float):
+        self.engine.seek(t)
+        self.showChanged.emit()
+
+    def toggle_play(self):
+        self.engine.toggle_play()
+        self.showChanged.emit()
+
     def go(self):
         self.engine.go()
         self.showChanged.emit()

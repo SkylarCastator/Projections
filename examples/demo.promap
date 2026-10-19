@@ -454,13 +454,9 @@
     {
       "id": "c1",
       "name": "Dark",
-      "media": {
-        "pumpkin1": null,
-        "wall0001": null,
-        "ghost001": null,
-        "crate1": null,
-        "bush1": null
-      },
+      "clips": [],
+      "length": null,
+      "loop": true,
       "fade": 0.0,
       "hold": null,
       "audio": null,
@@ -471,13 +467,46 @@
     {
       "id": "c2",
       "name": "Pumpkin wakes",
-      "media": {
-        "pumpkin1": "media/pulse.gif",
-        "wall0001": null,
-        "ghost001": null,
-        "crate1": "media/flames.mp4",
-        "bush1": "media/eyes.gif"
-      },
+      "clips": [
+        {
+          "id": "bd7f0c88",
+          "surface_id": "pumpkin1",
+          "media": "gen:holographic_foil",
+          "start": 0.0,
+          "duration": 4.0,
+          "fade_in": 2.0,
+          "fade_out": 0.0
+        },
+        {
+          "id": "d529e646",
+          "surface_id": "crate1",
+          "media": "media/flames.mp4",
+          "start": 0.0,
+          "duration": 4.0,
+          "fade_in": 2.0,
+          "fade_out": 0.0
+        },
+        {
+          "id": "2a288f74",
+          "surface_id": "bush1",
+          "media": "media/eyes.gif",
+          "start": 0.0,
+          "duration": 4.0,
+          "fade_in": 2.0,
+          "fade_out": 0.0
+        },
+        {
+          "id": "61f1582f",
+          "surface_id": "pumpkin1",
+          "media": "gen:dithering",
+          "start": 4.0,
+          "duration": 4.0,
+          "fade_in": 2.0,
+          "fade_out": 0.0
+        }
+      ],
+      "length": 8.0,
+      "loop": true,
       "fade": 2.0,
       "hold": 4.0,
       "audio": "media/drone.wav",
@@ -488,13 +517,55 @@
     {
       "id": "c3",
       "name": "Everything",
-      "media": {
-        "pumpkin1": "media/pulse.gif",
-        "wall0001": "media/bars.mp4",
-        "ghost001": "media/ghost.png",
-        "crate1": "media/flames.mp4",
-        "bush1": "media/eyes.gif"
-      },
+      "clips": [
+        {
+          "id": "90dc4171",
+          "surface_id": "pumpkin1",
+          "media": "media/pulse.gif",
+          "start": 0.0,
+          "duration": 10.0,
+          "fade_in": 1.5,
+          "fade_out": 0.0
+        },
+        {
+          "id": "e12f37d8",
+          "surface_id": "wall0001",
+          "media": "media/bars.mp4",
+          "start": 0.0,
+          "duration": 10.0,
+          "fade_in": 1.5,
+          "fade_out": 0.0
+        },
+        {
+          "id": "ac0709fa",
+          "surface_id": "ghost001",
+          "media": "media/ghost.png",
+          "start": 0.0,
+          "duration": 10.0,
+          "fade_in": 1.5,
+          "fade_out": 0.0
+        },
+        {
+          "id": "8f6779b6",
+          "surface_id": "crate1",
+          "media": "media/flames.mp4",
+          "start": 0.0,
+          "duration": 10.0,
+          "fade_in": 1.5,
+          "fade_out": 0.0
+        },
+        {
+          "id": "31be58c0",
+          "surface_id": "bush1",
+          "media": "media/eyes.gif",
+          "start": 0.0,
+          "duration": 10.0,
+          "fade_in": 1.5,
+          "fade_out": 0.0
+        }
+      ],
+      "length": null,
+      "loop": true,
       "fade": 1.5,
       "hold": null,
       "audio": "media/drone.wav",
@@ -505,13 +576,19 @@
     {
       "id": "c4",
       "name": "Ghost only",
-      "media": {
-        "pumpkin1": null,
-        "wall0001": null,
-        "ghost001": "media/ghost.png",
-        "crate1": null,
-        "bush1": null
-      },
+      "clips": [
+        {
+          "id": "f6c551a6",
+          "surface_id": "ghost001",
+          "media": "media/ghost.png",
+          "start": 0.0,
+          "duration": 10.0,
+          "fade_in": 3.0,
+          "fade_out": 0.0
+        }
+      ],
+      "length": null,
+      "loop": true,
       "fade": 3.0,
       "hold": null,
       "audio": null,
@@ -522,13 +599,55 @@
     {
       "id": "4d440475",
       "name": "Storm",
-      "media": {
-        "pumpkin1": "media/lightning.mp4",
-        "wall0001": "media/rain.mp4",
-        "ghost001": "media/ghost.png",
-        "crate1": "media/drips.mp4",
-        "bush1": "media/fog.mp4"
-      },
+      "clips": [
+        {
+          "id": "55bc87b5",
+          "surface_id": "pumpkin1",
+          "media": "media/lightning.mp4",
+          "start": 0.0,
+          "duration": 10.0,
+          "fade_in": 2.0,
+          "fade_out": 0.0
+        },
+        {
+          "id": "14e6e910",
+          "surface_id": "wall0001",
+          "media": "media/rain.mp4",
+          "start": 0.0,
+          "duration": 10.0,
+          "fade_in": 2.0,
+          "fade_out": 0.0
+        },
+        {
+          "id": "046a2db4",
+          "surface_id": "ghost001",
+          "media": "media/ghost.png",
+          "start": 0.0,
+          "duration": 10.0,
+          "fade_in": 2.0,
+          "fade_out": 0.0
+        },
+        {
+          "id": "d6e31004",
+          "surface_id": "crate1",
+          "media": "media/drips.mp4",
+          "start": 0.0,
+          "duration": 10.0,
+          "fade_in": 2.0,
+          "fade_out": 0.0
+        },
+        {
+          "id": "a06ff719",
+          "surface_id": "bush1",
+          "media": "media/fog.mp4",
+          "start": 0.0,
+          "duration": 10.0,
+          "fade_in": 2.0,
+          "fade_out": 0.0
+        }
+      ],
+      "length": null,
+      "loop": true,
       "fade": 2.0,
       "hold": null,
       "audio": "media/drone.wav",
@@ -584,5 +703,6 @@
         "notes": ""
       }
     ]
-  }
+  },
+  "camera": null
 }

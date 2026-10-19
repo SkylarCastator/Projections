@@ -93,16 +93,105 @@ class Surface:
 
 
 @dataclass
+class Clip:
+    """One piece of media on one surface for a stretch of the cue's timeline."""
+    id: str = field(default_factory=_new_id)
+    surface_id: str = ""
+    media: str | None = None  # file path or gen: string; None = a deliberate dark stretch
+    start: float = 0.0  # seconds into the cue
+    duration: float = 5.0
+    fade_in: float = 0.0  # seconds, inside the clip
+    fade_out: float = 0.0
+
+    @property
+    def end(self) -> float:
+        return self.start + self.duration
+
+    def covers(self, t: float) -> bool:
+        return self.start <= t < self.end
+
+
+DEFAULT_CUE_LENGTH = 10.0
+
+
+@dataclass
 class Cue:
+    """A sequence: tracks are surfaces, clips sit on them along a time axis. Fired as one
+    unit (GO, a pad), it runs from 0 and loops unless it holds then advances."""
     id: str = field(default_factory=_new_id)
     name: str = "Cue"
-    media: dict[str, str | None] = field(default_factory=dict)  # surface id -> media path
-    fade: float = 1.0  # crossfade seconds
+    clips: list[Clip] = field(default_factory=list)
+    length: float | None = None  # seconds; None = hold, else the last clip's end, else DEFAULT_CUE_LENGTH
+    loop: bool = True  # run the sequence again when it reaches its length (unless hold advances first)
+    fade: float = 1.0  # seconds the previous cue's layers take to fade out when this one starts
     hold: float | None = None  # auto-advance after N seconds; None waits for GO
     audio: str | None = None  # soundtrack file; same file as the previous cue keeps playing
     audio_gain: float = 1.0
     audio_loop: bool = True
     audio_fade: float | None = None  # None -> use `fade`
+
+    # -- timeline queries ---------------------------------------------------------------
+    @property
+    def total(self) -> float:
+        if self.length is not None:
+            return max(0.1, self.length)
+        if self.hold is not None:
+            return max(0.1, self.hold)
+        return max((c.end for c in self.clips), default=DEFAULT_CUE_LENGTH)
+
+    def track(self, sid: str) -> list[Clip]:
+        return sorted((c for c in self.clips if c.surface_id == sid), key=lambda c: c.start)
+
+    def clip_at(self, sid: str, t: float) -> Clip | None:
+        """The clip a surface plays at cue time t: when clips overlap, the one that started last."""
+        hits = [c for c in self.clips if c.surface_id == sid and c.covers(t)]
+        return max(hits, key=lambda c: c.start) if hits else None
+
+    def media_at(self, sid: str, t: float) -> str | None:
+        c = self.clip_at(sid, t)
+        return c.media if c else None
+
+    def clip_by_id(self, cid: str) -> Clip | None:
+        return next((c for c in self.clips if c.id == cid), None)
+
+    def assignments(self, t: float = 0.0) -> dict[str, str | None]:
+        """surface id -> media at time t, for every surface that has a clip in this cue."""
+        return {sid: self.media_at(sid, t) for sid in {c.surface_id for c in self.clips}}
+
+    def set_track(self, sid: str, media: str | None, fade_in: float | None = None):
+        """Make the surface play `media` for the whole cue (one full-length clip)."""
+        old = self.track(sid)
+        fi = fade_in if fade_in is not None else (old[0].fade_in if old else self.fade)
+        self.clips = [c for c in self.clips if c.surface_id != sid]
+        if media is not None:
+            self.clips.append(Clip(surface_id=sid, media=media, start=0.0, duration=self.total, fade_in=fi))
+
+    def set_assignments(self, assign: dict[str, str | None]):
+        for sid, media in assign.items():
+            self.set_track(sid, media)
+
+    @classmethod
+    def from_assignments(cls, name: str, assign: dict[str, str | None], **kw) -> "Cue":
+        cue = cls(name=name, **kw)
+        cue.set_assignments(assign)
+        return cue
+
+    # -- serialisation --------------------------------------------------------------------
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d["clips"] = [asdict(c) for c in self.clips]
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Cue":
+        d = dict(d)
+        legacy = d.pop("media", None)  # files from before clips: one media per surface for the whole cue
+        clips = [Clip(**c) for c in d.pop("clips", [])]
+        cue = cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+        cue.clips = clips
+        if legacy and not clips:
+            cue.set_assignments(legacy)
+        return cue
 
 
 @dataclass
@@ -164,7 +253,7 @@ class Project:
                 "screen": self.output_screen,
             },
             "surfaces": [asdict(s) for s in self.surfaces],
-            "cues": [asdict(c) for c in self.cues],
+            "cues": [c.to_dict() for c in self.cues],
             "scene": self.scene.to_dict(),
             "camera": self.camera,
         }
@@ -178,7 +267,7 @@ class Project:
             output_height=int(out.get("height", 1080)),
             output_screen=out.get("screen"),
             surfaces=[Surface(**s) for s in d.get("surfaces", [])],
-            cues=[Cue(**c) for c in d.get("cues", [])],
+            cues=[Cue.from_dict(c) for c in d.get("cues", [])],
             scene=Scene.from_dict(d.get("scene")),
             camera=d.get("camera"),
         )

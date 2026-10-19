@@ -3,8 +3,10 @@
 Two modes:
   * preview (cue_index == -1): each surface shows its own `media` field. This is
     what you look at while aligning corners in the editor.
-  * cue (cue_index >= 0): the cue's media assignments drive the surfaces, with a
-    crossfade when a surface changes media between cues.
+  * cue (cue_index >= 0): the cue is a sequence. A cue clock runs from 0 when the cue
+    is fired (and can be paused, scrubbed and looped); at every tick each surface
+    plays whichever clip covers the clock, with the clip's own fade-in / fade-out.
+    Firing a cue fades the previous cue's layers out over the new cue's `fade`.
 
 A Layer is one piece of media on one surface with its own clock. During a
 crossfade a surface briefly has two layers, one fading out and one fading in.
@@ -33,11 +35,16 @@ class Layer:
     fade_out: float = 0.0
     id: str = field(default_factory=lambda: f"L{int(time.monotonic()*1e6):x}")
     voice: object = None  # audio Voice when the layer plays its video's sound
+    clip_key: tuple | None = None  # (clip id, loop cycle) when the layer plays a cue clip
+    end_at: float | None = None  # wall time the clip ends; its fade_out runs up to it
+    end_fade: float = 0.0
 
     def opacity(self, now: float) -> float:
         o = 1.0
         if self.fade_in > 0:
             o = min(1.0, (now - self.started) / self.fade_in)
+        if self.end_at is not None and self.end_fade > 0:
+            o = min(o, max(0.0, (self.end_at - now) / self.end_fade))
         if self.fade_out_at is not None:
             if self.fade_out <= 0:
                 return 0.0
@@ -45,7 +52,17 @@ class Layer:
         return max(0.0, o)
 
     def dead(self, now: float) -> bool:
-        return self.fade_out_at is not None and now >= self.fade_out_at + self.fade_out
+        if self.fade_out_at is not None and now >= self.fade_out_at + self.fade_out:
+            return True
+        return self.end_at is not None and now >= self.end_at
+
+    def shift(self, dt: float):
+        """Move the layer's clocks by dt (the engine was paused that long)."""
+        self.started += dt
+        if self.fade_out_at is not None:
+            self.fade_out_at += dt
+        if self.end_at is not None:
+            self.end_at += dt
 
     def frame(self, now: float, surface: Surface) -> tuple[Frame, object] | None:
         if self.source is None:
@@ -89,7 +106,9 @@ class ShowEngine:
         self.layers: list[Layer] = []
         self.cue_index: int = -1
         self.blackout: bool = False
-        self._cue_entered_at: float | None = None
+        self._cue_entered_at: float | None = None  # wall time of cue clock zero
+        self.paused: bool = False
+        self._paused_t: float = 0.0  # cue time while paused
         self._load_errors: dict[str, str] = {}
         self.preview_mode()
 
@@ -108,6 +127,7 @@ class ShowEngine:
     def preview_mode(self):
         self.cue_index = -1
         self._cue_entered_at = None
+        self.paused = False
         self._apply({s.id: s.media for s in self.project.surfaces}, fade=0.0)
         self._set_cue_audio(None, 0.0, 1.0, True)
 
@@ -117,18 +137,135 @@ class ShowEngine:
             return self.project.cues[self.cue_index]
         return None
 
-    def goto(self, index: int):
+    def goto(self, index: int, at: float = 0.0, paused: bool = False):
+        """Fire a cue: its clock starts at `at` seconds; the previous cue's layers fade out over
+        the new cue's `fade`."""
         cues = self.project.cues
         if not cues:
             return
         index = max(0, min(index, len(cues) - 1))
         cue = cues[index]
+        now = time.monotonic()
         self.cue_index = index
-        self._cue_entered_at = time.monotonic()
-        assign = {s.id: cue.media.get(s.id) for s in self.project.surfaces}
-        self._apply(assign, fade=cue.fade)
+        self.paused = paused
+        self._paused_t = at
+        self._cue_entered_at = now - at
+        for l in self.layers:
+            if l.fade_out_at is None:
+                surf = self.project.surface_by_id(l.surface_id)
+                if surf is not None and surf.kind == "reference":
+                    continue
+                l.fade_out_at, l.fade_out = now, cue.fade
+                if l.voice is not None:
+                    self.audio.stop(l.voice, cue.fade)
+        self._sync_clips(now)
         fade = cue.fade if cue.audio_fade is None else cue.audio_fade
         self._set_cue_audio(cue.audio, fade, cue.audio_gain, cue.audio_loop)
+
+    # -- cue clock ---------------------------------------------------------------
+    def cue_time(self, now: float | None = None) -> float:
+        """Seconds into the current cue's sequence (wrapped when the cue loops)."""
+        cue = self.current_cue
+        if cue is None or self._cue_entered_at is None:
+            return 0.0
+        if self.paused:
+            return self._paused_t
+        now = time.monotonic() if now is None else now
+        t = now - self._cue_entered_at
+        total = cue.total
+        if cue.loop and cue.hold is None:
+            if t >= total:
+                cycles = int(t // total)
+                self._cue_entered_at += cycles * total  # keep the clock small; layers carry their cycle
+                t -= cycles * total
+        else:
+            t = min(t, total)  # a one-shot sequence parks at its end
+        return t
+
+    def _cycle(self, now: float) -> int:
+        """Which pass through a looping cue a layer belongs to (so a loop restarts its clips)."""
+        cue = self.current_cue
+        if cue is None or self._cue_entered_at is None or not (cue.loop and cue.hold is None):
+            return 0
+        return int((now - self._cue_entered_at) // cue.total) if not self.paused else 0
+
+    def seek(self, t: float):
+        """Move the cue clock (scrubbing). Clips are re-evaluated with no fades."""
+        cue = self.current_cue
+        if cue is None:
+            return
+        now = time.monotonic()
+        t = max(0.0, min(float(t), max(0.0, cue.total - 1e-3)))
+        self._paused_t = t
+        self._cue_entered_at = now - t
+        for l in self.layers:
+            if l.clip_key is not None and l.fade_out_at is None:
+                l.fade_out_at, l.fade_out = now, 0.0
+                if l.voice is not None:
+                    self.audio.stop(l.voice, 0.0)
+        self._sync_clips(now, restart=True)
+
+    def pause(self):
+        if self.current_cue is None or self.paused:
+            return
+        now = time.monotonic()
+        self._paused_t = self.cue_time(now)
+        self.paused = True
+        if self.audio is not None and self._cue_voice is not None:
+            self.audio.stop(self._cue_voice, 0.0)
+            self._cue_voice, self._cue_audio_path = None, None
+
+    def play(self):
+        cue = self.current_cue
+        if cue is None:
+            if self.project.cues:
+                self.goto(0)
+            return
+        if not self.paused:
+            return
+        now = time.monotonic()
+        dt = now - (self._cue_entered_at + self._paused_t)
+        for l in self.layers:
+            l.shift(dt)
+        self._cue_entered_at = now - self._paused_t
+        self.paused = False
+        self._set_cue_audio(cue.audio, 0.0, cue.audio_gain, cue.audio_loop)
+
+    def toggle_play(self):
+        if self.paused or self.current_cue is None:
+            self.play()
+        else:
+            self.pause()
+
+    def _sync_clips(self, now: float, restart: bool = False):
+        """Make the live layers match the clips under the cue clock."""
+        cue = self.current_cue
+        if cue is None:
+            return
+        t = self.cue_time(now)
+        cycle = self._cycle(now)
+        live = {l.surface_id: l for l in self.layers if l.fade_out_at is None and l.clip_key is not None}
+        for s in self.project.surfaces:
+            if s.kind != "media":
+                continue
+            clip = cue.clip_at(s.id, t)
+            cur = live.get(s.id)
+            key = (clip.id, cycle) if clip is not None else None
+            if cur is not None and cur.clip_key == key:
+                continue
+            if cur is not None:
+                cur.fade_out_at = now
+                cur.fade_out = 0.0 if restart else (0.0 if clip is not None else cur.end_fade)
+                if cur.voice is not None:
+                    self.audio.stop(cur.voice, cur.fade_out)
+            if clip is None or clip.media is None:
+                continue
+            started = now - (t - clip.start)
+            layer = Layer(surface_id=s.id, media=clip.media, source=self._open(clip.media), started=started,
+                          fade_in=clip.fade_in, clip_key=key, end_at=started + clip.duration, end_fade=clip.fade_out)
+            if (self.audio is not None and s.video_audio and self._is_video(clip.media) and layer.source is not None):
+                layer.voice = self.audio.play(self.project.resolve_media(clip.media), loop=s.loop, fade_in=clip.fade_in)
+            self.layers.append(layer)
 
     def _set_cue_audio(self, path: str | None, fade: float, gain: float, loop: bool):
         if self.audio is None:
@@ -153,15 +290,19 @@ class ShowEngine:
             self.goto(self.cue_index - 1)
 
     def refresh(self):
-        """Re-read surface.media in preview mode (after the editor changed it)."""
+        """Preview mode: re-read surface.media. Cue mode: re-evaluate the clips (after an edit)."""
         if self.cue_index == -1:
             self.preview_mode()
         else:
-            # a surface was added/removed under a live cue: make sure every
-            # surface has a layer, keep the ones that already match
-            cue = self.current_cue
-            assign = {s.id: cue.media.get(s.id) for s in self.project.surfaces}
-            self._apply(assign, fade=0.0)
+            now = time.monotonic()
+            for l in self.layers:  # a clip under the playhead may have changed media or timing
+                if l.clip_key is not None and l.fade_out_at is None:
+                    cue = self.current_cue
+                    clip = cue.clip_by_id(l.clip_key[0])
+                    if clip is None or clip.media != l.media or abs((l.end_at - l.started) - clip.duration) > 1e-6 \
+                            or clip.fade_out != l.end_fade or not clip.covers(self.cue_time(now)):
+                        l.fade_out_at, l.fade_out = now, 0.0
+            self._sync_clips(now)
 
     # -- layer bookkeeping ---------------------------------------------------
     def _open(self, media: str | None) -> FrameSource | None:
@@ -222,9 +363,12 @@ class ShowEngine:
             if l.source is not None and l.media and self._is_video(l.media):
                 l.source.close()
         cue = self.current_cue
-        if cue is not None and cue.hold is not None and self._cue_entered_at is not None:
-            if now - self._cue_entered_at >= cue.hold and self.cue_index + 1 < len(self.project.cues):
+        if cue is not None:
+            if cue.hold is not None and not self.paused and self._cue_entered_at is not None \
+                    and now - self._cue_entered_at >= cue.hold and self.cue_index + 1 < len(self.project.cues):
                 self.go()
+                return
+            self._sync_clips(now)
 
     @staticmethod
     def _is_video(media: str) -> bool:

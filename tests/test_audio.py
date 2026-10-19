@@ -76,10 +76,10 @@ def test_cue_audio_follows_cues(tmp_path):
     s = Surface(name="S")
     p.surfaces.append(s)
     p.cues += [
-        Cue(name="1", media={s.id: None}, audio="a.wav", fade=0.0),
-        Cue(name="2", media={s.id: None}, audio="a.wav", audio_gain=0.5, fade=0.0),
-        Cue(name="3", media={s.id: None}, audio="b.wav", fade=0.0),
-        Cue(name="4", media={s.id: None}, audio=None, fade=0.0),
+        Cue.from_assignments("1", {s.id: None}, audio="a.wav", fade=0.0),
+        Cue.from_assignments("2", {s.id: None}, audio="a.wav", audio_gain=0.5, fade=0.0),
+        Cue.from_assignments("3", {s.id: None}, audio="b.wav", fade=0.0),
+        Cue.from_assignments("4", {s.id: None}, audio=None, fade=0.0),
     ]
     audio = AudioEngine(device=None)
     eng = ShowEngine(p, audio=audio)

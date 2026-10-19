@@ -18,7 +18,7 @@ def test_engine_runs_generative_media_and_live_param_edit():
     assert eng.render_items(now=2.0)[0].frame.params["speed"] == 0.5
     assert layer.source.media == "gen:neon_glow?speed=0.5"
     # a cue carrying an animation
-    p.cues.append(Cue(name="c", media={s.id: "gen:metaballs?p1=0.9"}))
+    p.cues.append(Cue.from_assignments("c", {s.id: "gen:metaballs?p1=0.9"}))
     eng.goto(0)
     fr = [it for it in eng.render_items() if it.frame is not None and getattr(it.frame, "effect", "") == "metaballs"]
     assert fr and fr[0].frame.params["p1"] == 0.9
@@ -44,8 +44,8 @@ def test_state_update_gen_params_without_restart():
     # same thing inside a running cue
     from promap.model.project import Cue
 
-    st.project.cues.append(Cue(name="x", media={s.id: "gen:metaballs"}))
+    st.project.cues.append(Cue.from_assignments("x", {s.id: "gen:metaballs"}))
     st.goto(0)
     st.update_gen_params(s.id, {"p2": 0.1})
-    assert st.project.cues[0].media[s.id] == "gen:metaballs?p2=0.1"
+    assert st.project.cues[0].media_at(s.id, 0) == "gen:metaballs?p2=0.1"
     assert st.live_sources(s.id)[0].params["p2"] == 0.1
