@@ -106,6 +106,10 @@ class AppState(QObject):
         w, h = self.project.output_size
         label = "Mask" if kind == "mask" else ("Triangle" if mesh == "triangle" else "Surface")
         s = Surface(name=f"{label} {n}", kind=kind)
+        if kind == "media":
+            from promap.media.generative import DEFAULT_SURFACE_MEDIA
+
+            s.media = DEFAULT_SURFACE_MEDIA  # a grid, so the warp reads before any media is chosen
         s.corners = [[w * 0.3, h * 0.3], [w * 0.7, h * 0.3], [w * 0.7, h * 0.7], [w * 0.3, h * 0.7]]
         if mesh == "triangle":
             s.mesh = triangle_mesh([[w * 0.4, h * 0.3], [w * 0.6, h * 0.65], [w * 0.4, h * 0.65]])
@@ -610,7 +614,9 @@ class AppState(QObject):
         self.surfacesChanged.emit()
 
     def add_mesh_surface(self, mesh: Mesh, name: str, item_type: str = "", notes: str = "") -> Surface:
-        s = Surface(name=name, kind="media", mesh=mesh, item_type=item_type, notes=notes)
+        from promap.media.generative import DEFAULT_SURFACE_MEDIA
+
+        s = Surface(name=name, kind="media", mesh=mesh, item_type=item_type, notes=notes, media=DEFAULT_SURFACE_MEDIA)
         s.corners = mesh.bounds_corners()
         self.project.surfaces.append(s)
         self.surface_edited(s.id)

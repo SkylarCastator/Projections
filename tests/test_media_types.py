@@ -28,6 +28,9 @@ def test_panel_follows_media_type(panel):
     st.select(s.id)
     rows = lambda: (p.media_type.currentData(), p.form.isRowVisible(p.media_pick), p.loop.isVisibleTo(p),
                     p.video_audio.isVisibleTo(p), p.form.isRowVisible(p.speed), p.media_pick.currentIndex())
+    assert rows() == ("gen", True, False, False, True, 1)  # a new surface starts on the alignment grid
+    s.media = None
+    p._refresh_props(s.id)
     assert rows() == ("none", False, False, False, False, 0)
     first = next(iter(EFFECTS))
     for media, want in [

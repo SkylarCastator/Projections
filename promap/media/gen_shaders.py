@@ -130,6 +130,29 @@ vec3 effect(vec2 uv, vec2 p, float t) {
 }
 """
 
+BODIES["alignment_grid"] = """
+// Mapping aid, not a look: a square-celled grid with a border, diagonals, a centre circle and a
+// filled top-left cell, so keystone, stretch, flips and a mesh's wobble all show at a glance.
+vec3 effect(vec2 uv, vec2 p, float t) {
+    float cells = max(2.0, floor(u_p1 + 0.5));
+    float lw = max(0.004, u_p2 * 0.5);              // line half-width, in cells
+    vec2 g = uv * cells;
+    vec2 f = abs(fract(g) - 0.5);
+    float line = step(0.5 - lw, max(f.x, f.y));    // cell edges
+    vec2 e = min(uv, 1.0 - uv) * cells;
+    float border = step(min(e.x, e.y), lw * 2.0);
+    vec3 col = mix(u_color2, u_color1, max(line, border));
+    if (u_p3 > 0.5) {
+        float d1 = abs(uv.x - uv.y), d2 = abs(uv.x + uv.y - 1.0);
+        float diag = step(min(d1, d2), lw * 1.4 / cells);
+        float ring = step(abs(length((uv - 0.5) * vec2(u_res.x / u_res.y, 1.0)) - 0.25), lw * 1.2 / cells);
+        float corner = step(max(g.x, g.y), 1.0) * 0.55;  // top-left cell tinted: orientation
+        col = mix(col, u_color3, max(max(diag, ring), corner));
+    }
+    return col;
+}
+"""
+
 BODIES["bauhaus_shapes"] = """
 vec3 effect(vec2 uv, vec2 p, float t) {
     float n = 4.0 * u_scale;

@@ -70,5 +70,25 @@ def test_every_effect_compiles_and_animates(ctx, name):
     b = r.readbacks["L"].copy()
     assert a.shape == (96, 128, 3)
     assert max(a.std(), b.std()) > 4, f"{name}: frame is flat"
+    if g.EFFECTS[name].static:
+        return  # a still mapping aid
     assert np.abs(a.astype(int) - b.astype(int)).mean() > 0.5, f"{name}: nothing moves"
     r.release()
+
+
+def test_new_surfaces_start_with_the_alignment_grid():
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from promap.media.generative import DEFAULT_SURFACE_MEDIA, EFFECTS, parse_media
+    from promap.model.mesh import triangle_mesh
+    from promap.ui.state import AppState
+
+    assert "alignment_grid" in EFFECTS and parse_media(DEFAULT_SURFACE_MEDIA)[0].name == "alignment_grid"
+    st = AppState()
+    q = st.add_surface("media")
+    tri = st.add_surface("media", mesh="triangle")
+    sq = st.add_surface("media", mesh="square")
+    m = st.add_mesh_surface(triangle_mesh([[0, 0], [100, 0], [0, 100]]), "Lasso 1")
+    assert all(s.media == DEFAULT_SURFACE_MEDIA for s in (q, tri, sq, m))
+    assert st.add_surface("mask").media is None

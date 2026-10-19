@@ -45,6 +45,7 @@ GROUP_COLORS = {
     "organic": QColor(90, 180, 120), "retro": QColor(200, 140, 70), "material": QColor(120, 150, 220), "geometric": QColor(220, 90, 90),
     "light": QColor(230, 90, 200), "3d": QColor(120, 200, 220), "print": QColor(170, 120, 200), "text": QColor(240, 200, 60),
     "particles": QColor(90, 210, 170), "digital": QColor(80, 220, 200), "lines": QColor(150, 190, 100),
+    "mapping": QColor(160, 160, 170),
 }
 FILE_COLOR = QColor(70, 130, 180)
 DARK_COLOR = QColor(55, 55, 60)

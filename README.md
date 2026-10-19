@@ -30,8 +30,10 @@ uv pip install -e ".[dev]"
    for focusing the lens and seeing where quads land on the props.
 3. The tool palette down the left of the canvas adds things to the scene: **▢ Media**
    adds a surface (a quad), **△** a triangle, **▣** a mask, **▦** a reference photo,
-   **⌇** the lasso. Drag a quad's corners in the canvas until the
-   media hugs the object. Drag inside to move the whole quad. Arrow keys nudge the
+   **⌇** the lasso. Every new surface starts out showing an **alignment grid** (a built-in
+   animation: square cells, border, diagonals, centre ring, a marked corner) so keystone,
+   stretch and flips are obvious while you drag its corners in the canvas until it hugs
+   the object; then give it real media. Drag inside to move the whole quad. Arrow keys nudge the
    active corner (Tab cycles corners, Shift = 10 px steps, Shift-drag snaps to 10 px).
    **▣ Mask** adds a black quad to blank out spill (a window, a doorway).
 4. Pick the surface's **Type**: image, video, animated image (GIF / WebP) or a built-in
