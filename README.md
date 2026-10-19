@@ -14,15 +14,18 @@ uv pip install -e ".[dev]"
 ## Run
 
 ```bash
-.venv/bin/promap examples/demo.promap            # editor
-.venv/bin/promap show.promap --output HDMI-1 --cue 1   # straight into the show
+.venv/bin/promap examples/demo.promap            # editor; press Project (F5) when ready to go live
+.venv/bin/promap show.promap --output HDMI-1 --cue 1   # straight into the show, output already open
 .venv/bin/python -m pytest                        # tests (GPU tests skip without GL)
 ```
 
 ## Workflow
 
 1. **Output → Set output size** to the projector's resolution (default 1920x1080),
-   then **Output → Open on screen → <projector>**. Esc in that window closes it.
+   then press **● Project** (F5, top right of the viewer, also under Output). Nothing reaches
+   the projector until you do; the button turns into **■ Live on <screen>** and pressing it
+   again, or Esc in the output window, takes it down. It uses the screen saved in the
+   project, else the screen the editor is not on; **Output → Open on screen** picks another.
 2. **Output → Test pattern (T)** projects a labelled grid with every surface outlined,
    for focusing the lens and seeing where quads land on the props.
 3. The tool palette down the left of the canvas adds things to the scene: **▢ Media**
@@ -39,7 +42,7 @@ uv pip install -e ".[dev]"
    surface, in the list or in the canvas, for Duplicate, Delete, Bring to front / Move
    up / Move down / Send to back, and Lock. Delete in the list removes the selected one.
 5. **Cues**: set each surface's media the way a moment of the show should look, then
-   **Add from editor** in the Cues window. A cue is a sequence of clips per surface with
+   **+ → Cue from editor** in the Cues window. A cue is a sequence of clips per surface with
    fades (see *Cues as sequences*); a crossfade length and an optional hold time for
    auto-advance sit on the cue.
 6. **GO (Space)** / **Back (Backspace)** step through cues. **Preview mode** drops
@@ -166,6 +169,10 @@ One camera pixel covers several projector pixels (about 4 to 9 with a 640x480 ca
 the camera can resolve and fills the rest, and all thresholds scale with that ratio. Use
 1280x720 or 1920x1080 on the camera for tighter outlines.
 
+Set `PROMAP_NO_CAMERA_SCAN=1` to skip the camera probe altogether (headless runs, tests: the
+probe reads a frame from every video node, which blinks a laptop's webcam LED). The test
+suite sets it for itself.
+
 ## Kinect v2
 
 The Kinect for Xbox One (time-of-flight depth, 512x424) is driven by libfreenect2, which is
@@ -259,25 +266,37 @@ suite compiles every effect and checks that it moves.
 A cue is a sequence, edited like a video timeline in **View → Cues window** (Ctrl+Shift+U):
 one track per media surface, clips along a time axis, a ruler with a playhead. A clip is one
 piece of media (image, video, GIF, built-in animation, or a deliberate dark stretch) on one
-surface from a start time for a length, with its own fade-in and fade-out. The cue has a
-length; when the playhead reaches it the sequence loops, unless the cue has a hold time, in
-which case the show advances to the next cue. Firing a cue (GO, a pad later) fades the
-previous cue's layers out over the new cue's **Fade**.
+surface from a start time for a length, with its own fade-in and fade-out. The cue has one
+length (the yellow end marker: drag it, type it, or drag a clip past it) and one choice of
+what happens there: **loop**, **next cue** (the show advances by itself) or **stop** (park
+on the last frame until GO). Firing a cue (GO, a pad later) fades the previous cue's
+layers out over the new cue's **Fade**.
 
-Everything in the editor plays live on the canvas and the output: picking a cue fires it,
-paused at 0; dragging the ruler scrubs; Space plays. Drag a clip to move it (onto another
+The editor plays live on the canvas and the output once you touch its transport: dragging
+the ruler fires the cue paused and scrubs it; Space plays. Selecting a cue only shows it. Drag a clip to move it (onto another
 track too); drag its ends to trim; drag the small squares on its top corners to set the
 fades; double-click an empty track to drop the surface's editor media there; right-click a
 clip for its media (animation list, file, editor media, dark), split at the playhead,
 duplicate, delete; right-click a track to add; right-click anywhere for cue length and
-loop. The inspector row edits the selected clip's numbers, and **Parameters…** opens the
+the at-end choice. The inspector row edits the selected clip's numbers, and **Parameters…** opens the
 Animations window on an animation clip. Keys: Space, Home, ←/→ nudge, S split, Delete.
-Ctrl+wheel zooms.
+Ctrl+wheel zooms. The tracks fill the window; drag anything to the right edge and the
+sequence scrolls and grows under it, the playhead keeps itself on screen while playing,
+and the track names stay pinned on the left. Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste a clip, at the playhead on its
+own track, or **Paste here** from a track's right-click menu; the clipboard carries it
+between cues and projects. Undo and redo (↶ ↷ in the toolbar, Ctrl+Z / Ctrl+Shift+Z) cover
+every edit here, and an undo while a cue is live keeps that cue playing.
 
-The **Cue list** dock beside it keeps the flat list: name, fade, hold, soundtrack and gain;
-**Add from editor** still makes a cue from each surface's current media (one full-length
-clip per surface), and **Load into editor** puts the clips under the playhead back onto the
-surfaces. Old projects load unchanged: a per-surface media map becomes full-length clips.
+Back, GO, Preview mode and Blackout sit in a toolbar across the top of the window, with
+the show status. The narrow **Cues** dock beside the editor is just the names: select one
+and the editor shows it
+(selecting never fires a cue; GO, Fire, or the transport do). **+** adds a cue, empty or
+from each surface's current media (one full-length clip per surface). Right-click a cue
+for the rest: fire, rename, duplicate, delete, move up / down, update from editor, load
+into editor (its clips under the playhead go back onto the surfaces). The cue's own
+settings sit above the tracks: length and the at-end choice, the fade from the previous
+cue, and the soundtrack with its gain and loop. Old projects load unchanged: a per-surface
+media map becomes full-length clips.
 
 ## Demo media
 

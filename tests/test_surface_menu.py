@@ -66,6 +66,7 @@ def test_main_window_has_tool_palette_and_list_menu(state):
 
 
 def test_docks_detachable_and_camera_detach(state):
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QDockWidget
     from promap.ui.main_window import MainWindow
 
@@ -74,8 +75,10 @@ def test_docks_detachable_and_camera_detach(state):
     assert set(w.docks) == {"Surfaces"}
     assert w.cues_window.isHidden() and w.cues_window.isWindow()
     w.open_cues_window()
-    assert w.cues_window.isVisible() and {d.windowTitle() for d in w.cues_window.findChildren(QDockWidget)} == {"Cue list"}
+    assert w.cues_window.isVisible() and {d.windowTitle() for d in w.cues_window.findChildren(QDockWidget)} == {"Cues"}
     assert w.cues_window.centralWidget() is w.cue_editor
+    assert w.cue_transport.go_btn.text().startswith("GO") and w.cues_window.toolBarArea(w.cue_transport) == Qt.TopToolBarArea
+    assert w.cue_panel.minimumSizeHint().width() < 260  # the list stays narrow
     w.cues_window.close()
     for d in w.docks.values():
         assert d.features() & QDockWidget.DockWidgetFloatable and d.features() & QDockWidget.DockWidgetClosable
@@ -195,3 +198,39 @@ def test_preferences_dialog_tabs(state):
     assert d.tabs.currentIndex() == 1 and d.generation_page.url.text()
     d.generation_page.reject()  # the page's Cancel closes the whole dialog
     assert d.result() == 0 and d.isHidden()
+
+
+def test_project_toggle_opens_and_closes_output(state, monkeypatch):
+    from promap.ui.main_window import MainWindow
+
+    w = MainWindow(state)
+    w.show()
+    calls = []
+
+    class FakeOut:
+        def screen(self):
+            class S:
+                def name(self):
+                    return "HDMI-9"
+            return S()
+
+        def close(self):
+            calls.append("close")
+
+    def fake_open(screen_name=None):
+        calls.append(("open", screen_name))
+        w.output = FakeOut()
+        w._sync_live()
+
+    monkeypatch.setattr(w, "open_output", fake_open)
+    state.project.output_screen = "HDMI-9"
+    assert w.live_act.text() == "● Project" and not w.live_act.isChecked() and w.live_act.isVisible()
+    assert any(a is w.live_act for a in w.view_bar.actions())
+    w.live_act.trigger()
+    assert calls == [("open", "HDMI-9")] and w.live_act.isChecked() and w.live_act.text() == "■ Live on HDMI-9"
+    w.tabs.setCurrentIndex(2)  # the toggle stays on the 3D tab too
+    assert w.live_act.isVisible()
+    w.live_act.trigger()
+    assert calls[-1] == "close" and w.output is None and not w.live_act.isChecked() and w.live_act.text() == "● Project"
+    w.state.dirty = False
+    w.close()

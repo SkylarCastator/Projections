@@ -116,3 +116,31 @@ def test_seek_and_pause(tmp_path):
     assert eng.cue_time() == t
     eng.toggle_play()
     assert not eng.paused
+
+
+def test_length_and_hold_stay_together():
+    c = Cue(name="x", hold=4.0, clips=[Clip(surface_id="s", media="a.png", start=0, duration=4)])
+    assert c.total == 4 and c.end_mode == "next"
+    c.extend_to(8.0)  # a clip dragged past the end
+    assert c.total == 8 and c.hold == 8 and c.length == 8
+    c.set_length(6.0)
+    assert c.hold == 6
+    c.set_end_mode("loop")
+    assert c.hold is None and c.loop and c.total == 6
+    c.set_end_mode("stop")
+    assert not c.loop and c.end_mode == "stop"
+    c.set_end_mode("next")
+    assert c.hold == 6 and c.end_mode == "next"
+
+
+def test_next_cue_fires_at_the_sequence_end(tmp_path):
+    p, s = _project(tmp_path)
+    p.cues += [Cue(name="1", hold=0.5, length=1.0, clips=[Clip(surface_id=s.id, media="a.png", start=0, duration=1)]),
+               Cue(name="2")]
+    eng = ShowEngine(p)
+    eng.goto(0)
+    t0 = eng._cue_entered_at
+    eng.tick(t0 + 0.7)  # past the stale hold, before the length: still cue 1
+    assert eng.cue_index == 0
+    eng.tick(t0 + 1.01)
+    assert eng.cue_index == 1

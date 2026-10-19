@@ -94,3 +94,10 @@ def test_segment_finds_bright_and_dark_blobs():
     assert len(detect.segment(img, "diff", background=bg, min_area=200)) == 2
     meshes = detect.detections_to_meshes(dets, None)
     assert len(meshes) == 2 and all(m.tris for m in meshes)
+
+
+def test_camera_scan_is_skipped_under_the_env_flag(monkeypatch):
+    from promap.camera import capture
+
+    monkeypatch.setenv(capture.NO_SCAN_ENV, "1")
+    assert capture.list_cameras() == []

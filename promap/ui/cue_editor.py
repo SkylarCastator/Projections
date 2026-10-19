@@ -11,18 +11,20 @@ Mouse on the sequence:
   clip left/right  drag trims
   square handles   drag sets the fade-in / fade-out length
   empty track      double-click adds a clip there; right-click for what to add
-  right-click      clip menu (media, split, duplicate, delete) or cue menu (length, loop)
-Keys: Space play/pause, Home start, ←/→ nudge 0.1 s (Shift 1 s), S split at playhead, Delete.
+  right-click      clip menu (media, split, duplicate, delete) or cue menu (length, at-end)
+  end marker       drag the yellow line to set the cue's length (clips dragged past it extend it)
+Keys: Space play/pause, Home start, ←/→ nudge 0.1 s (Shift 1 s), S split at playhead, Delete,
+Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste a clip (at the playhead, on its own track), Ctrl+Z / Ctrl+Shift+Z.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QRectF, QPointF, QTimer, Signal
-from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QMouseEvent, QWheelEvent, QKeyEvent, QPolygonF, QShortcut, QKeySequence
+from PySide6.QtCore import Qt, QRectF, QPointF, QTimer, Signal, QEvent
+from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QMouseEvent, QWheelEvent, QKeyEvent, QPolygonF, QShortcut, QKeySequence, QCursor
 from PySide6.QtWidgets import (
     QWidget, QMenu, QFileDialog, QInputDialog, QVBoxLayout, QHBoxLayout, QScrollArea, QToolButton, QLabel,
-    QComboBox, QDoubleSpinBox, QCheckBox, QSlider, QPushButton, QSizePolicy,
+    QComboBox, QDoubleSpinBox, QCheckBox, QSlider, QPushButton, QSizePolicy, QLineEdit, QApplication,
 )
 
 from promap.media import generative as gen
@@ -35,6 +37,9 @@ TRACK_H = 44
 CLIP_PAD = 5
 HANDLE = 7  # px, fade handles and edge grab width
 NEW_CLIP_S = 5.0
+EDGE_SCROLL_PX = 36  # dragging within this many px of the viewport's side scrolls it
+EDGE_SCROLL_STEP = 18
+CLIP_MIME = "promap-clip:"  # clipboard text prefix: a clip as JSON, pasteable across cues and projects
 
 GROUP_COLORS = {
     "organic": QColor(90, 180, 120), "retro": QColor(200, 140, 70), "material": QColor(120, 150, 220), "geometric": QColor(220, 90, 90),
@@ -82,6 +87,9 @@ class SequenceView(QWidget):
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMinimumHeight(RULER_H + TRACK_H)
+        self._scroll_timer = QTimer(self)  # keeps scrolling while a drag sits at the viewport's edge
+        self._scroll_timer.setInterval(30)
+        self._scroll_timer.timeout.connect(self._edge_scroll_tick)
 
     # -- geometry -------------------------------------------------------------------------
     def cue(self) -> Cue | None:
@@ -106,14 +114,56 @@ class SequenceView(QWidget):
         y = self.row_y(ids.index(c.surface_id))
         return QRectF(self.x_at(c.start), y + CLIP_PAD, c.duration * self.px_per_s, TRACK_H - 2 * CLIP_PAD)
 
+    def _ox(self) -> int:
+        """Horizontal scroll offset: the label column is drawn at it so names stay put."""
+        return self.ed.area.horizontalScrollBar().value()
+
+    def _viewport_w(self) -> int:
+        return max(self.ed.area.viewport().width(), 200)
+
     def relayout(self):
         cue = self.cue()
         total = cue.total if cue else 10.0
-        w = int(self.x_at(total) + 240)
-        h = int(RULER_H + TRACK_H * max(1, len(self.tracks())) + 10)
+        w = max(int(self.x_at(total) + 240), self._viewport_w())  # tracks always reach the right edge
+        h = max(int(RULER_H + TRACK_H * max(1, len(self.tracks())) + 10), self.ed.area.viewport().height())
         self.setMinimumSize(w, h)
-        self.resize(max(w, self.width()), h)
+        self.resize(w, h)
         self.update()
+
+    def ensure_visible_t(self, t: float, margin: int = 60):
+        """Scroll so cue time t is on screen (the running playhead, a seek)."""
+        x = int(self.x_at(t))
+        bar = self.ed.area.horizontalScrollBar()
+        ox, vw = bar.value(), self._viewport_w()
+        if x > ox + vw - margin:
+            bar.setValue(min(bar.maximum(), x - vw + margin))
+        elif x < ox + LABEL_W + margin:
+            bar.setValue(max(0, x - LABEL_W - margin))
+
+    def _edge_scroll_step(self, pos: QPointF) -> int:
+        """Scroll when a drag sits near the viewport's left/right edge; returns the px scrolled."""
+        bar = self.ed.area.horizontalScrollBar()
+        ox, vw = bar.value(), self._viewport_w()
+        if pos.x() > ox + vw - EDGE_SCROLL_PX:
+            step = EDGE_SCROLL_STEP
+            if bar.value() >= bar.maximum():  # make room: the content grows as the drag goes on
+                self.setMinimumWidth(self.width() + step)
+                self.resize(self.width() + step, self.height())
+            bar.setValue(bar.value() + step)
+        elif pos.x() < ox + LABEL_W + EDGE_SCROLL_PX and ox > 0:
+            step = -EDGE_SCROLL_STEP
+            bar.setValue(max(0, bar.value() + step))
+        else:
+            return 0
+        return bar.value() - ox
+
+    def _edge_scroll_tick(self):
+        if self._drag is None:
+            self._scroll_timer.stop()
+            return
+        pos = QPointF(self.mapFromGlobal(QCursor.pos()))
+        if self._edge_scroll_step(pos):
+            self._apply_drag(QPointF(self.mapFromGlobal(QCursor.pos())))  # the widget moved under the cursor
 
     def set_zoom(self, px: float, about_t: float | None = None):
         self.px_per_s = max(6.0, min(400.0, px))
@@ -131,17 +181,15 @@ class SequenceView(QWidget):
         tracks = self.tracks()
         total = cue.total if cue else 10.0
         sel_sid = self.state.selected
+        ox = self._ox()
+        content = QRectF(ox + LABEL_W, 0, self.width() - ox - LABEL_W, self.height())
         # tracks
         for r, s in enumerate(tracks):
             y = self.row_y(r)
             p.fillRect(QRectF(LABEL_W, y, self.width() - LABEL_W, TRACK_H), QColor(36, 36, 40) if r % 2 else QColor(40, 40, 44))
-            p.fillRect(QRectF(0, y, LABEL_W, TRACK_H), QColor(46, 46, 52) if s.id == sel_sid else QColor(42, 42, 47))
-            p.setPen(QPen(QColor(235, 235, 235) if s.id == sel_sid else QColor(175, 175, 175)))
-            glyph = "△" if s.mesh is not None else "▢"
-            p.drawText(QRectF(10, y, LABEL_W - 14, TRACK_H), Qt.AlignVCenter | Qt.AlignLeft,
-                       p.fontMetrics().elidedText(f"{glyph} {s.name}", Qt.ElideRight, LABEL_W - 18))
             p.setPen(QPen(QColor(22, 22, 25)))
             p.drawLine(QPointF(0, y + TRACK_H), QPointF(self.width(), y + TRACK_H))
+        p.setClipRect(content)
         # beyond the cue's length
         xe = self.x_at(total)
         p.fillRect(QRectF(xe, RULER_H, self.width() - xe, self.height() - RULER_H), QColor(0, 0, 0, 70))
@@ -154,7 +202,6 @@ class SequenceView(QWidget):
                 self._paint_clip(p, c, rect)
         # ruler
         p.fillRect(QRectF(0, 0, self.width(), RULER_H), QColor(24, 24, 27))
-        p.fillRect(QRectF(0, 0, LABEL_W, RULER_H), QColor(30, 30, 34))
         step = self._tick_step()
         p.setPen(QPen(QColor(120, 120, 130)))
         t = 0.0
@@ -189,7 +236,21 @@ class SequenceView(QWidget):
         elif cue is None:
             p.setPen(QPen(QColor(150, 150, 150)))
             p.drawText(QRectF(LABEL_W + 10, RULER_H, 600, TRACK_H), Qt.AlignVCenter | Qt.AlignLeft,
-                       "No cue: press + Cue, or 'Add from editor' in the Cues list")
+                       "No cue: press + in the Cue list")
+        # pinned label column, drawn last at the scroll offset so it covers whatever scrolled under it
+        p.setClipping(False)
+        p.fillRect(QRectF(ox, 0, LABEL_W, RULER_H), QColor(30, 30, 34))
+        for r, s in enumerate(tracks):
+            y = self.row_y(r)
+            p.fillRect(QRectF(ox, y, LABEL_W, TRACK_H), QColor(46, 46, 52) if s.id == sel_sid else QColor(42, 42, 47))
+            p.setPen(QPen(QColor(235, 235, 235) if s.id == sel_sid else QColor(175, 175, 175)))
+            glyph = "△" if s.mesh is not None else "▢"
+            p.drawText(QRectF(ox + 10, y, LABEL_W - 14, TRACK_H), Qt.AlignVCenter | Qt.AlignLeft,
+                       p.fontMetrics().elidedText(f"{glyph} {s.name}", Qt.ElideRight, LABEL_W - 18))
+            p.setPen(QPen(QColor(22, 22, 25)))
+            p.drawLine(QPointF(ox, y + TRACK_H), QPointF(ox + LABEL_W, y + TRACK_H))
+        p.setPen(QPen(QColor(20, 20, 22), 2))
+        p.drawLine(QPointF(ox + LABEL_W, 0), QPointF(ox + LABEL_W, self.height()))
         p.end()
 
     def _paint_clip(self, p: QPainter, c: Clip, r: QRectF):
@@ -241,9 +302,13 @@ class SequenceView(QWidget):
     # -- hit testing -------------------------------------------------------------------------
     def hit(self, pos: QPointF):
         """('ruler', t) | ('fade_in'|'fade_out'|'left'|'right'|'body', clip) | ('track', surface, t) | None"""
-        if pos.y() < RULER_H and pos.x() >= LABEL_W:
-            return ("ruler", self.t_at(pos.x()))
         cue = self.cue()
+        if pos.x() < self._ox() + LABEL_W:
+            return None  # the pinned label column
+        if cue is not None and abs(pos.x() - self.x_at(cue.total)) <= HANDLE and pos.y() >= RULER_H - 14:
+            return ("end", cue.total)  # the yellow end marker (grab it below the ruler's time labels)
+        if pos.y() < RULER_H:
+            return ("ruler", self.t_at(pos.x()))
         if cue is not None:
             for c in sorted(cue.clips, key=lambda c: -c.start):  # topmost (latest start) first
                 r = self.clip_rect(c)
@@ -262,7 +327,7 @@ class SequenceView(QWidget):
                     return ("body", c)
         r = int((pos.y() - RULER_H) // TRACK_H)
         tracks = self.tracks()
-        if 0 <= r < len(tracks) and pos.x() >= LABEL_W:
+        if 0 <= r < len(tracks):
             return ("track", tracks[r], self.t_at(pos.x()))
         return None
 
@@ -277,7 +342,7 @@ class SequenceView(QWidget):
         t = round(t * 20) / 20
         if cue is None:
             return max(0.0, t)
-        cands = [0.0, cue.total]
+        cands = [0.0] + ([] if (self._drag and self._drag.get("mode") == "end") else [cue.total])
         if self.ed.on_this_cue():
             cands.append(self.state.engine.cue_time())
         for c in cue.clips:
@@ -304,6 +369,12 @@ class SequenceView(QWidget):
         if kind == "ruler":
             self.ed.seek(h[1])
             self._drag = {"mode": "scrub"}
+            self._scroll_timer.start()
+            return
+        if kind == "end":
+            self.state.begin_gesture()
+            self._drag = {"mode": "end"}
+            self._scroll_timer.start()
             return
         if kind == "track":
             self.select_clip(None)
@@ -314,18 +385,27 @@ class SequenceView(QWidget):
         self.state.begin_gesture()
         self._drag = {"mode": kind, "clip": c, "x0": pos.x(), "y0": pos.y(), "start": c.start, "dur": c.duration,
                       "fi": c.fade_in, "fo": c.fade_out, "sid": c.surface_id, "moved": False}
+        self._scroll_timer.start()
 
     def mouseMoveEvent(self, ev: QMouseEvent):
         pos = ev.position()
         if self._drag is None:
             h = self.hit(pos)
             k = h[0] if h else None
-            self.setCursor({"left": Qt.SizeHorCursor, "right": Qt.SizeHorCursor, "fade_in": Qt.SizeHorCursor,
+            self.setCursor({"left": Qt.SizeHorCursor, "right": Qt.SizeHorCursor, "fade_in": Qt.SizeHorCursor, "end": Qt.SplitHCursor,
                             "fade_out": Qt.SizeHorCursor, "body": Qt.OpenHandCursor, "ruler": Qt.PointingHandCursor}.get(k, Qt.ArrowCursor))
             return
+        self._apply_drag(pos)
+
+    def _apply_drag(self, pos: QPointF):
         d = self._drag
+        if d is None:
+            return
         if d["mode"] == "scrub":
             self.ed.seek(self.t_at(pos.x()))
+            return
+        if d["mode"] == "end":
+            self.ed.set_length_live(self._snap(self.t_at(pos.x())), final=False)
             return
         c: Clip = d["clip"]
         dt = (pos.x() - d["x0"]) / self.px_per_s
@@ -352,9 +432,15 @@ class SequenceView(QWidget):
 
     def mouseReleaseEvent(self, ev: QMouseEvent):
         d, self._drag = self._drag, None
+        self._scroll_timer.stop()
         if d is None or d["mode"] == "scrub":
             return
         self.state.end_gesture()
+        if d["mode"] == "end":
+            cue = self.cue()
+            if cue is not None:
+                self.ed.set_length_live(cue.total, final=True)
+            return
         if d["moved"]:
             self.ed.clip_changed(d["clip"], final=True)
 
@@ -386,6 +472,12 @@ class SequenceView(QWidget):
             self.ed.split_at_playhead()
         elif k in (Qt.Key_Delete, Qt.Key_Backspace):
             self.ed.delete_selected()
+        elif k == Qt.Key_C and ev.modifiers() & Qt.ControlModifier:
+            self.ed.copy_selected()
+        elif k == Qt.Key_X and ev.modifiers() & Qt.ControlModifier:
+            self.ed.cut_selected()
+        elif k == Qt.Key_V and ev.modifiers() & Qt.ControlModifier:
+            self.ed.paste()
         else:
             super().keyPressEvent(ev)
 
@@ -428,6 +520,9 @@ class SequenceView(QWidget):
                 m.addAction("Parameters…", lambda: self.ed.edit_params(c))
             if not media_only:
                 m.addSeparator()
+                m.addAction("Copy  (Ctrl+C)", lambda: self.ed.copy_clip(c))
+                m.addAction("Cut  (Ctrl+X)", lambda: self.ed.cut_clip(c))
+                m.addSeparator()
                 m.addAction("Fade in…", lambda: self.ed.ask_fade(c, "fade_in"))
                 m.addAction("Fade out…", lambda: self.ed.ask_fade(c, "fade_out"))
                 m.addAction("Split at playhead  (S)", self.ed.split_at_playhead)
@@ -437,14 +532,19 @@ class SequenceView(QWidget):
             s, t = h[1], h[2]
             m.addSection(f"Add clip on {s.name} at {fmt_time(t)}")
             self._media_menu(m, lambda media: self.ed.add_clip(s.id, media, at=t), s)
+            if self.ed.clipboard_clip() is not None:
+                m.addSeparator()
+                m.addAction("Paste here  (Ctrl+V pastes at the playhead)", lambda: self.ed.paste(sid=s.id, at=t))
         if cue is not None and not media_only:
             m.addSeparator()
             m.addAction("Fit cue length to last clip", self.ed.fit_length)
             m.addAction("Set cue length…", self.ed.ask_length)
-            loop = m.addAction("Loop")
-            loop.setCheckable(True)
-            loop.setChecked(cue.loop)
-            loop.toggled.connect(self.ed.set_loop)
+            end = m.addMenu("At the end")
+            for label, key in (("Loop", "loop"), ("Next cue", "next"), ("Stop", "stop")):
+                a = end.addAction(label)
+                a.setCheckable(True)
+                a.setChecked(cue.end_mode == key)
+                a.triggered.connect(lambda _=False, k=key: self.ed.set_end_mode(k))
         if not m.isEmpty():
             m.exec(ev.globalPosition().toPoint())
 
@@ -453,7 +553,6 @@ class CueEditor(QWidget):
     def __init__(self, state: AppState, parent=None):
         super().__init__(parent)
         self.state = state
-        self._cue_index = 0  # the cue being edited (follows the engine when it runs one)
         self._loading = False
         lay = QVBoxLayout(self)
         lay.setContentsMargins(4, 4, 4, 4)
@@ -461,16 +560,11 @@ class CueEditor(QWidget):
 
         # transport / cue row
         top = QHBoxLayout()
-        self.cue_combo = QComboBox()
-        self.cue_combo.setMinimumWidth(180)
-        self.cue_combo.setToolTip("Which cue to edit. Picking one fires it on the output, paused at 0.")
-        self.cue_combo.currentIndexChanged.connect(self._combo_changed)
-        top.addWidget(self.cue_combo)
-        self.add_cue_btn = QPushButton("+ Cue")
-        self.add_cue_btn.setToolTip("New empty cue after this one")
-        self.add_cue_btn.clicked.connect(self.add_cue)
-        top.addWidget(self.add_cue_btn)
-        top.addSpacing(12)
+        self.cue_name = QLabel("No cue")
+        self.cue_name.setStyleSheet("font-weight: bold; padding: 0 6px;")
+        self.cue_name.setMinimumWidth(160)
+        top.addWidget(self.cue_name)
+        top.addSpacing(8)
 
         def tb(text, tip, fn):
             b = QToolButton()
@@ -495,16 +589,20 @@ class CueEditor(QWidget):
         self.length.setToolTip("How long the cue's sequence runs before it loops or holds")
         self.length.valueChanged.connect(self._length_changed)
         top.addWidget(self.length)
-        self.loop = QCheckBox("Loop")
-        self.loop.setToolTip("Run the sequence again from 0 when it reaches the end (a cue with a hold time advances instead)")
-        self.loop.toggled.connect(self.set_loop)
-        top.addWidget(self.loop)
-        top.addSpacing(12)
+        top.addWidget(QLabel("at end"))
+        self.end_mode = QComboBox()
+        for label, key in (("loop", "loop"), ("next cue", "next"), ("stop", "stop")):
+            self.end_mode.addItem(label, key)
+        self.end_mode.setToolTip("What happens when the playhead reaches the cue's length: start again, fire the next cue, "
+                                 "or park on the last frame until GO")
+        self.end_mode.currentIndexChanged.connect(self._end_mode_changed)
+        top.addWidget(self.end_mode)
+        top.addStretch(1)
         self.add_clip_btn = QPushButton("+ Clip")
         self.add_clip_btn.setToolTip("Put the selected surface's editor media on its track at the playhead")
         self.add_clip_btn.clicked.connect(self.add_clip_from_selection)
         top.addWidget(self.add_clip_btn)
-        top.addStretch(1)
+        top.addSpacing(8)
         top.addWidget(QLabel("Zoom"))
         self.zoom = QSlider(Qt.Horizontal)
         self.zoom.setRange(6, 400)
@@ -515,6 +613,45 @@ class CueEditor(QWidget):
         top.addWidget(self.zoom)
         lay.addLayout(top)
 
+        # cue settings: how it comes in, what it sounds like
+        cue_row = QHBoxLayout()
+        cue_row.addWidget(QLabel("Fade from previous"))
+        self.fade = QDoubleSpinBox()
+        self.fade.setRange(0.0, 60.0)
+        self.fade.setDecimals(1)
+        self.fade.setSuffix(" s")
+        self.fade.setToolTip("Seconds the previous cue's layers take to fade out when this cue fires")
+        self.fade.valueChanged.connect(lambda v: self._cue_field("fade", float(v)))
+        cue_row.addWidget(self.fade)
+        cue_row.addSpacing(16)
+        cue_row.addWidget(QLabel("Soundtrack"))
+        self.audio = QLineEdit()
+        self.audio.setReadOnly(True)
+        self.audio.setPlaceholderText("none")
+        self.audio.setToolTip("Audio file for this cue. The same file in consecutive cues keeps playing; a different one crossfades.")
+        cue_row.addWidget(self.audio, 1)
+        audio_pick = QPushButton("…")
+        audio_pick.setFixedWidth(28)
+        audio_pick.clicked.connect(self._pick_audio)
+        cue_row.addWidget(audio_pick)
+        audio_clear = QPushButton("×")
+        audio_clear.setFixedWidth(28)
+        audio_clear.setToolTip("No soundtrack")
+        audio_clear.clicked.connect(lambda: self._cue_field("audio", None, restart_audio=True))
+        cue_row.addWidget(audio_clear)
+        cue_row.addWidget(QLabel("Gain"))
+        self.gain = QDoubleSpinBox()
+        self.gain.setRange(0.0, 4.0)
+        self.gain.setDecimals(2)
+        self.gain.setSingleStep(0.05)
+        self.gain.valueChanged.connect(lambda v: self._cue_field("audio_gain", float(v), restart_audio=True))
+        cue_row.addWidget(self.gain)
+        self.audio_loop = QCheckBox("Loop audio")
+        self.audio_loop.toggled.connect(lambda on: self._cue_field("audio_loop", bool(on), restart_audio=True))
+        cue_row.addWidget(self.audio_loop)
+        self.cue_widgets = [self.fade, self.audio, audio_pick, audio_clear, self.gain, self.audio_loop]
+        lay.addLayout(cue_row)
+
         # the sequence
         self.area = QScrollArea()
         self.area.setWidgetResizable(False)
@@ -522,6 +659,7 @@ class CueEditor(QWidget):
         self.view = SequenceView(self)
         self.view.clipSelected.connect(self._show_clip)
         self.area.setWidget(self.view)
+        self.area.viewport().installEventFilter(self)
         lay.addWidget(self.area, 1)
 
         # inspector
@@ -559,15 +697,26 @@ class CueEditor(QWidget):
         state.surfacesChanged.connect(self.view.relayout)
         state.projectReplaced.connect(self._refresh)
         state.showChanged.connect(self._follow_engine)
+        state.cueSelected.connect(self._cue_selected)
         self._refresh()
+
+    def eventFilter(self, obj, ev):
+        if obj is self.area.viewport() and ev.type() == QEvent.Resize:
+            self.view.relayout()
+        return super().eventFilter(obj, ev)
 
     # -- which cue ------------------------------------------------------------------------
     def cue(self) -> Cue | None:
         cues = self.state.project.cues
         if not cues:
             return None
-        self._cue_index = max(0, min(self._cue_index, len(cues) - 1))
-        return cues[self._cue_index]
+        if not (0 <= self.state.cue_selected < len(cues)):
+            self.state.select_cue(0)
+        return cues[self.state.cue_selected]
+
+    @property
+    def _cue_index(self) -> int:
+        return self.state.cue_selected
 
     def on_this_cue(self) -> bool:
         return self.state.engine.cue_index == self._cue_index and self.cue() is not None
@@ -575,29 +724,27 @@ class CueEditor(QWidget):
     def _follow_engine(self):
         i = self.state.engine.cue_index
         if i >= 0 and i != self._cue_index:
-            self._cue_index = i
-            self._refresh()
+            self.state.select_cue(i)  # the show moved on: edit what is playing
         self._update_transport()
 
-    def _combo_changed(self, i: int):
-        if self._loading or i < 0:
-            return
-        self._cue_index = i
-        self.state.fire_cue(i, at=0.0, paused=True)
+    def _cue_selected(self, _i: int):
+        self.view.selected = None
         self._refresh()
 
     def _refresh(self):
         self._loading = True
-        cues = self.state.project.cues
-        self.cue_combo.clear()
-        for k, c in enumerate(cues):
-            self.cue_combo.addItem(f"{k + 1}. {c.name}")
         cue = self.cue()
         if cue is not None:
-            self.cue_combo.setCurrentIndex(self._cue_index)
+            self.cue_name.setText(f"{self._cue_index + 1}. {cue.name}")
             self.length.setValue(cue.total)
-            self.loop.setChecked(cue.loop)
-        for w in (self.length, self.loop, self.add_clip_btn):
+            self.end_mode.setCurrentIndex(self.end_mode.findData(cue.end_mode))
+            self.fade.setValue(cue.fade)
+            self.audio.setText(cue.audio or "")
+            self.gain.setValue(cue.audio_gain)
+            self.audio_loop.setChecked(cue.audio_loop)
+        else:
+            self.cue_name.setText("No cue")
+        for w in (self.length, self.end_mode, self.add_clip_btn, *self.cue_widgets):
             w.setEnabled(cue is not None)
         self._loading = False
         if self.view.selected and (cue is None or cue.clip_by_id(self.view.selected) is None):
@@ -606,10 +753,32 @@ class CueEditor(QWidget):
         self.view.relayout()
         self._update_transport()
 
+    def _cue_field(self, key: str, value, restart_audio: bool = False):
+        cue = self.cue()
+        if self._loading or cue is None or getattr(cue, key) == value:
+            return
+        setattr(cue, key, value)
+        self.state.cues_edited()
+        if restart_audio and self.on_this_cue():
+            self.state.fire_cue(self._cue_index, at=self.state.engine.cue_time(), paused=self.state.engine.paused)
+        self._refresh()
+
+    def _pick_audio(self):
+        cue = self.cue()
+        if cue is None:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Choose soundtrack", str(self.state.project.base_dir),
+                                              "Audio (*.wav *.mp3 *.ogg *.flac *.m4a *.aac *.opus);;All files (*)")
+        if path:
+            self._cue_field("audio", self.state.project.relativize_media(path), restart_audio=True)
+
     def _tick(self):
         if self.on_this_cue():
-            self.time_label.setText(fmt_time(self.state.engine.cue_time()))
+            t = self.state.engine.cue_time()
+            self.time_label.setText(fmt_time(t))
             if not self.state.engine.paused:
+                if self.view._drag is None:
+                    self.view.ensure_visible_t(t)
                 self.view.update()
 
     def _update_transport(self):
@@ -646,31 +815,57 @@ class CueEditor(QWidget):
         cues = self.state.project.cues
         cue = Cue(name=f"Cue {len(cues) + 1}", length=10.0)
         cues.insert(self._cue_index + 1 if cues else 0, cue)
-        self._cue_index = cues.index(cue)
         self.state.cues_edited()
-        self.state.fire_cue(self._cue_index, at=0.0, paused=True)
+        self.state.select_cue(cues.index(cue))
         self._refresh()
 
     def _length_changed(self, v: float):
         cue = self.cue()
-        if self._loading or cue is None:
+        if self._loading or cue is None or abs(cue.total - float(v)) < 1e-6:
             return
-        cue.length = float(v)
+        cue.set_length(float(v))
         self.state.cues_edited()
         self.state.engine.refresh()
+        self.view.relayout()
 
-    def set_loop(self, on: bool):
+    def _end_mode_changed(self, _i: int):
         cue = self.cue()
-        if self._loading or cue is None or cue.loop == bool(on):
+        if self._loading or cue is None:
             return
-        cue.loop = bool(on)
+        mode = self.end_mode.currentData()
+        if mode != cue.end_mode:
+            cue.set_end_mode(mode)
+            self.state.cues_edited()
+
+    def set_end_mode(self, mode: str):
+        cue = self.cue()
+        if cue is None or cue.end_mode == mode:
+            return
+        cue.set_end_mode(mode)
         self.state.cues_edited()
+        self._refresh()
+
+    def set_length_live(self, seconds: float, final: bool):
+        """End-marker drag."""
+        cue = self.cue()
+        if cue is None:
+            return
+        cue.set_length(max(0.1, round(seconds * 20) / 20))
+        self.state.engine.refresh()
+        if final:
+            self.state.cues_edited()
+            self._refresh()
+        else:
+            self._loading = True
+            self.length.setValue(cue.total)
+            self._loading = False
+            self.view.relayout()
 
     def fit_length(self):
         cue = self.cue()
         if cue is None or not cue.clips:
             return
-        cue.length = max(c.end for c in cue.clips)
+        cue.set_length(max(c.end for c in cue.clips))
         self.state.cues_edited()
         self._refresh()
 
@@ -680,7 +875,7 @@ class CueEditor(QWidget):
             return
         v, ok = QInputDialog.getDouble(self, "Cue length", "Seconds", cue.total, 0.1, 36000, 1)
         if ok:
-            cue.length = v
+            cue.set_length(v)
             self.state.cues_edited()
             self._refresh()
 
@@ -700,8 +895,7 @@ class CueEditor(QWidget):
             duration = min(NEW_CLIP_S, (min(nxt) - t) if nxt else NEW_CLIP_S)
         clip = Clip(surface_id=sid, media=media, start=t, duration=max(0.1, duration))
         cue.clips.append(clip)
-        if cue.length is not None and clip.end > cue.length:
-            cue.length = clip.end
+        cue.extend_to(clip.end)
         self.state.cues_edited()
         self.state.engine.refresh()
         self.view.select_clip(clip.id)
@@ -718,6 +912,13 @@ class CueEditor(QWidget):
         self.add_clip(s.id, s.media)
 
     def clip_changed(self, c: Clip, final: bool):
+        cue = self.cue()
+        if cue is not None and c.end > cue.total + 1e-6:
+            cue.extend_to(c.end)  # a clip dragged past the end takes the end with it
+            self._loading = True
+            self.length.setValue(cue.total)
+            self._loading = False
+            self.view.relayout()
         self.state.engine.refresh()
         if final:
             self.state.cues_edited()
@@ -756,8 +957,7 @@ class CueEditor(QWidget):
             return
         d = Clip(surface_id=c.surface_id, media=c.media, start=c.end, duration=c.duration, fade_in=c.fade_in, fade_out=c.fade_out)
         cue.clips.append(d)
-        if cue.length is not None and d.end > cue.length:
-            cue.length = d.end
+        cue.extend_to(d.end)
         self.state.cues_edited()
         self.state.engine.refresh()
         self.view.select_clip(d.id)
@@ -778,6 +978,64 @@ class CueEditor(QWidget):
         c = self.selected_clip()
         if c is not None:
             self.delete_clip(c)
+
+    # -- clipboard -------------------------------------------------------------------------------
+    def copy_clip(self, c: Clip):
+        import json
+        from dataclasses import asdict
+
+        QApplication.clipboard().setText(CLIP_MIME + json.dumps(asdict(c)))
+
+    def clipboard_clip(self) -> Clip | None:
+        import json
+
+        text = QApplication.clipboard().text() or ""
+        if not text.startswith(CLIP_MIME):
+            return None
+        try:
+            d = json.loads(text[len(CLIP_MIME):])
+            return Clip(**{k: v for k, v in d.items() if k in Clip.__dataclass_fields__})
+        except (ValueError, TypeError):
+            return None
+
+    def copy_selected(self):
+        c = self.selected_clip()
+        if c is not None:
+            self.copy_clip(c)
+
+    def cut_clip(self, c: Clip):
+        self.copy_clip(c)
+        self.delete_clip(c)
+
+    def cut_selected(self):
+        c = self.selected_clip()
+        if c is not None:
+            self.cut_clip(c)
+
+    def paste(self, sid: str | None = None, at: float | None = None) -> Clip | None:
+        """Paste the copied clip: on `sid` (else its own track if that surface exists, else the
+        selected one) at `at` (else the playhead)."""
+        cue = self.cue()
+        src = self.clipboard_clip()
+        if cue is None or src is None:
+            return None
+        if sid is None:
+            sid = src.surface_id if self.state.project.surface_by_id(src.surface_id) else None
+        if sid is None:
+            sel = self.state.selected_surface
+            sid = sel.id if (sel is not None and sel.kind == "media") else None
+        if sid is None:
+            return None
+        t = self.state.engine.cue_time() if (at is None and self.on_this_cue()) else (at or 0.0)
+        clip = Clip(surface_id=sid, media=src.media, start=round(max(0.0, t) * 20) / 20, duration=src.duration,
+                    fade_in=src.fade_in, fade_out=src.fade_out)
+        cue.clips.append(clip)
+        cue.extend_to(clip.end)
+        self.state.cues_edited()
+        self.state.engine.refresh()
+        self.view.select_clip(clip.id)
+        self._refresh()
+        return clip
 
     def edit_params(self, c: Clip | None):
         if c is None or not gen.is_generative(c.media):

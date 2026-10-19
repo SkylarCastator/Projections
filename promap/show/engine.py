@@ -365,7 +365,7 @@ class ShowEngine:
         cue = self.current_cue
         if cue is not None:
             if cue.hold is not None and not self.paused and self._cue_entered_at is not None \
-                    and now - self._cue_entered_at >= cue.hold and self.cue_index + 1 < len(self.project.cues):
+                    and now - self._cue_entered_at >= cue.total and self.cue_index + 1 < len(self.project.cues):
                 self.go()
                 return
             self._sync_clips(now)

@@ -37,8 +37,19 @@ def _sys_name(index: int) -> str:
         return f"video{index}"
 
 
+NO_SCAN_ENV = "PROMAP_NO_CAMERA_SCAN"  # set (to anything) to skip probing: tests, headless runs
+
+
 def list_cameras(probe: bool = True, max_index: int = 16) -> list[CameraInfo]:
-    """Video devices that deliver frames, best (external) first."""
+    """Video devices that deliver frames, best (external) first.
+
+    Probing opens each node and reads a frame, which lights a laptop's webcam LED for a
+    moment; with PROMAP_NO_CAMERA_SCAN in the environment nothing is opened and the list is
+    empty."""
+    import os
+
+    if os.environ.get(NO_SCAN_ENV):
+        return []
     import cv2
 
     found: list[CameraInfo] = []

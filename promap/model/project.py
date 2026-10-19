@@ -139,6 +139,34 @@ class Cue:
             return max(0.1, self.hold)
         return max((c.end for c in self.clips), default=DEFAULT_CUE_LENGTH)
 
+    def set_length(self, seconds: float):
+        """Set the sequence length. A cue that advances to the next one does so at its end, so
+        `hold` follows."""
+        self.length = max(0.1, float(seconds))
+        if self.hold is not None:
+            self.hold = self.length
+
+    @property
+    def end_mode(self) -> str:
+        """'next' (advance to the next cue), 'loop', or 'stop' (park on the last frame)."""
+        if self.hold is not None:
+            return "next"
+        return "loop" if self.loop else "stop"
+
+    def set_end_mode(self, mode: str):
+        total = self.total
+        if mode == "next":
+            self.length = total
+            self.hold = total
+        else:
+            self.hold = None
+            self.loop = mode == "loop"
+
+    def extend_to(self, seconds: float):
+        """Grow the length (never shrink) so a clip ending at `seconds` fits."""
+        if seconds > self.total + 1e-6:
+            self.set_length(seconds)
+
     def track(self, sid: str) -> list[Clip]:
         return sorted((c for c in self.clips if c.surface_id == sid), key=lambda c: c.start)
 

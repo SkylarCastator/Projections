@@ -4,15 +4,15 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QGuiApplication, QKeySequence, QCloseEvent
+from PySide6.QtGui import QAction, QGuiApplication, QKeySequence, QCloseEvent, QShortcut
 from PySide6.QtWidgets import (
     QMainWindow, QDockWidget, QFileDialog, QMessageBox, QInputDialog, QApplication, QLabel, QProgressBar,
-    QScrollArea, QToolBar, QTabBar, QStackedWidget, QWidget, QVBoxLayout,
+    QScrollArea, QToolBar, QTabBar, QStackedWidget, QWidget, QVBoxLayout, QSizePolicy,
 )
 
 from promap.ui.canvas import EditorCanvas
 from promap.ui.view3d_widget import View3DWidget
-from promap.ui.cue_panel import CuePanel
+from promap.ui.cue_panel import CuePanel, CueTransport
 from promap.ui.output_window import OutputWindow
 from promap.ui.state import AppState
 from promap.ui.surface_panel import SurfacePanel
@@ -121,12 +121,18 @@ class MainWindow(QMainWindow):
         self.cues_window.setObjectName("cues_window")
         self.cues_window.resize(1400, 520)
         self.cues_window.setCentralWidget(self.cue_editor)
-        cue_dock = QDockWidget("Cue list", self.cues_window)
+        self.cue_transport = CueTransport(state, self.cues_window)
+        self.cues_window.addToolBar(Qt.TopToolBarArea, self.cue_transport)  # across both panes
+        cue_dock = QDockWidget("Cues", self.cues_window)
         cue_dock.setObjectName("cuesdock_list")
         cue_dock.setWidget(self.cue_panel)
         cue_dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
         self.cues_window.addDockWidget(Qt.LeftDockWidgetArea, cue_dock)
-        self.cues_window.resizeDocks([cue_dock], [520], Qt.Horizontal)
+        self.cues_window.resizeDocks([cue_dock], [220], Qt.Horizontal)
+        for keys, fn in (("Ctrl+Z", state.undo), ("Ctrl+Shift+Z", state.redo), ("Ctrl+Y", state.redo)):
+            sc = QShortcut(QKeySequence(keys), self.cues_window)  # the editor's shortcuts live on the main window
+            sc.setContext(Qt.WindowShortcut)
+            sc.activated.connect(fn)
         self.cues_window.hide()
         self._default_layout = self.saveState()
 
@@ -319,6 +325,7 @@ class MainWindow(QMainWindow):
         self.state.windowRequested.connect(self._window_request)
 
         o = mb.addMenu("&Output")
+        o.addAction(self.live_act)
         self.screen_menu = o.addMenu("Open on screen")
         self.screen_menu.aboutToShow.connect(self._fill_screens)
         self._act(o, "Close output", self.close_output, "Ctrl+W")
@@ -351,6 +358,27 @@ class MainWindow(QMainWindow):
             a.triggered.connect(lambda _=False, name=scr.name(): self.open_output(name))
 
     # -- output --------------------------------------------------------------------
+    def go_live(self):
+        """Open the output on the project's remembered screen, else the screen the editor is not on."""
+        self.open_output(self.state.project.output_screen)
+
+    def _live_toggled(self, on: bool):
+        if getattr(self, "_syncing_live", False):
+            return
+        if on:
+            self.go_live()
+        else:
+            self.close_output()
+        self._sync_live()
+
+    def _sync_live(self):
+        live = self.output is not None
+        self._syncing_live = True
+        self.live_act.setChecked(live)
+        self._syncing_live = False
+        name = self.output.screen().name() if live and self.output.screen() else ""
+        self.live_act.setText(f"■ Live on {name}" if live else "● Project")
+
     def open_output(self, screen_name: str | None = None):
         screens = QGuiApplication.screens()
         screen = next((s for s in screens if s.name() == screen_name), None)
@@ -368,14 +396,17 @@ class MainWindow(QMainWindow):
         self.state.project.output_screen = screen.name()
         self.statusBar().showMessage(f"Output on {screen.name()} (Esc in that window closes it)", 5000)
         self.activateWindow()
+        self._sync_live()
 
     def close_output(self):
         if self.output is not None:
             self.output.close()
             self.output = None
+        self._sync_live()
 
     def _output_closed(self):
         self.output = None
+        self._sync_live()
 
     def _set_output_size(self):
         w, h = self.state.project.output_size
@@ -485,7 +516,8 @@ class MainWindow(QMainWindow):
         bar.setMovable(False)
         bar.setFloatable(False)
         bar.setToolButtonStyle(Qt.ToolButtonTextOnly)
-        bar.setStyleSheet("QToolBar { border: 0; padding: 1px 4px; spacing: 2px; } QToolButton { padding: 2px 8px; }")
+        bar.setStyleSheet("QToolBar { border: 0; padding: 1px 4px; spacing: 2px; } QToolButton { padding: 2px 8px; }"
+                          " QToolButton:checked { background: #b03030; color: white; border-radius: 3px; }")  # the live toggle
         self.view_bar = bar
         self._bar_2d: list[QAction] = []
         self._bar_3d: list[QAction] = []
@@ -519,6 +551,18 @@ class MainWindow(QMainWindow):
         self._bar_2d.append(bar.addSeparator())
         label(self._bar_2d, "wheel zooms · middle-drag or Alt-drag pans · L lasso",
               "Ctrl+wheel zooms the camera preview and the timeline")
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self._bar_2d.append(bar.addWidget(spacer))
+        self.live_act = QAction("● Project", self)  # the one control that puts pixels on the projector
+        self.live_act.setCheckable(True)
+        self.live_act.setShortcut(QKeySequence("F5"))
+        self.live_act.setToolTip("Open the output window on the projector (the project's screen, else the other screen) and keep it live. "
+                                 "Again to close it.  (F5; Esc in the output window also closes it)")
+        self.live_act.toggled.connect(self._live_toggled)
+        bar.addAction(self.live_act)
+        self._bar_2d.append(self.live_act)
+        self._sync_live()
         # 3D scene
         btn(self._bar_3d, "Orbit", "Free orbit  (1)", lambda: self._set_view3d("orbit"))
         btn(self._bar_3d, "Projector", "Look through the projector's lens  (2)", lambda: self._set_view3d("projector"))
@@ -537,6 +581,8 @@ class MainWindow(QMainWindow):
             a.setVisible(not three)
         for a in self._bar_3d:
             a.setVisible(three)
+        if hasattr(self, "live_act"):
+            self.live_act.setVisible(True)
 
     def _view3d_call(self, method: str):
         if self.view3d is not None and self.view3d.alive:

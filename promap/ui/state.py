@@ -23,6 +23,7 @@ class AppState(QObject):
     sceneSelectionChanged = Signal(object)  # "projector", a node id, or None
     view3dRequested = Signal(str)  # "open", "close", or a viewpoint name
     windowRequested = Signal(str)  # "camera" | "animations": open that tool window
+    cueSelected = Signal(int)  # the cue being edited (list row and editor agree); -1 = none
     cancelRequested = Signal()  # Esc: stop any pattern run and clear the override frame
     undoChanged = Signal()  # undo/redo stacks changed (menu enable state)
 
@@ -387,8 +388,12 @@ class AppState(QObject):
         proj = Project.from_dict(json.loads(snap))
         proj.path = self.project.path
         sel, corner = self.selected, self.active_corner
+        eng = self.engine
+        ci, t, paused = eng.cue_index, eng.cue_time(), eng.paused  # an undo mid-cue stays in that cue
         self.project = proj
         self.engine.set_project(proj)
+        if 0 <= ci < len(proj.cues):
+            self.engine.goto(ci, at=t, paused=paused)
         self._pattern = None
         self._last_snapshot = snap
         self._last_push_t = 0.0
@@ -401,6 +406,7 @@ class AppState(QObject):
         self.cuesChanged.emit()
         self.sceneChanged.emit()
         self.selectionChanged.emit(self.selected)
+        self.showChanged.emit()
         self.showChanged.emit()
         self.undoChanged.emit()
 
@@ -453,6 +459,16 @@ class AppState(QObject):
             return cue.media_at(sid, self.engine.cue_time())
         s = self.project.surface_by_id(sid)
         return s.media if s is not None else None
+
+    cue_selected: int = -1
+
+    def select_cue(self, index: int):
+        """Choose the cue to edit. Does not fire it: the show keeps running whatever it runs."""
+        n = len(self.project.cues)
+        index = -1 if n == 0 else max(0, min(int(index), n - 1))
+        if index != self.cue_selected:
+            self.cue_selected = index
+            self.cueSelected.emit(index)
 
     def fire_cue(self, index: int, at: float = 0.0, paused: bool = False):
         """Start a cue at a point in its sequence, optionally paused (the editor's way in)."""
